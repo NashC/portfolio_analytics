@@ -16,6 +16,7 @@ dist/
 
 # Jupyter/IPython
 .ipynb_checkpoints/
+.ipynb
 
 # Data files
 *.csv

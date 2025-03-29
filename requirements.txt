@@ -4,3 +4,4 @@ pyyaml>=6.0
 streamlit>=1.30
 yfinance>=0.2.36
 pytest>=7.0
+pycoingecko>=3.1.0
