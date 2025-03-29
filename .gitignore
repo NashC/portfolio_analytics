@@ -1,0 +1,44 @@
+# Ignore virtual environment
+.venv/
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# Output / build artifacts
+output/
+build/
+dist/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# Data files
+*.csv
+data/
+!config/schema_mapping.yaml  # keep this config file tracked
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+
+# Streamlit secrets (if using)
+.streamlit/secrets.toml
+
+# Environment variables or sensitive config
+.env
+.env.*
+
+# Testing
+.coverage
+htmlcov/
+pytest_cache/
+.tox/
+.nox/
