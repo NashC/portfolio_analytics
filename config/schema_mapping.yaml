@@ -10,7 +10,6 @@ binanceus:
     currency: "Quote Asset"
     source_account: "Withdraw Method"
     destination_account: "Payment Method"
-    account_owner: "nash"
 
 coinbase:
   file_pattern: "coinbase_transaction_history.csv"
@@ -24,7 +23,6 @@ coinbase:
     currency: "Price Currency"
     source_account: ""
     destination_account: ""
-    account_owner: "nash"
 
 gemini:
   staking:
@@ -39,7 +37,6 @@ gemini:
       currency: "USD"
       source_account: ""
       destination_account: ""
-      account_owner: "nash"
 
   transactions:
     file_pattern: "gemini_transaction_history.csv"
@@ -53,4 +50,3 @@ gemini:
       currency: "USD"
       source_account: "Withdrawal Destination"
       destination_account: "Deposit Destination"
-      account_owner: "nash"

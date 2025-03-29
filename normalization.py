@@ -1,93 +1,80 @@
 import pandas as pd
+from utils import clean_numeric_column
 
-def normalize_transaction_types(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize transaction types to a unified set.
-    
-    Args:
-        df: DataFrame with a 'type' column.
-        
-    Returns:
-        DataFrame with normalized 'type' values.
-    """
-    type_mapping = {
-        "buy": "buy",
-        "purchase": "buy",
-        "sell": "sell",
-        "dividend": "dividend",
-        "deposit": "deposit",
-        "withdrawal": "withdrawal",
-        "transfer_in": "transfer_in",
-        "transfer_out": "transfer_out",
-        "staking_reward": "staking_reward",
-        "airdrop": "airdrop",
-        # Add more mappings as needed.
-    }
-    df["type"] = df["type"].str.lower().map(type_mapping).fillna(df["type"].str.lower())
-    return df
-
-def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = normalize_transaction_types(df)
-
-    # Ensure 'timestamp' column is datetime
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-
-    return df
-
-
-# Mapping from raw transaction types (case-insensitive) to unified categories
+# Expanded mapping for raw transaction types to our canonical set.
 TRANSACTION_TYPE_MAP = {
+    # BUY / SELL
     "buy": "buy",
-    "purchase": "buy",
-    "fill": "buy",
+    "advanced trade buy": "buy",
     "sell": "sell",
-    "sell to": "sell",
-    "withdrawal": "withdrawal",
-    "withdraw": "withdrawal",
-    "send": "transfer_out",
-    "receive": "transfer_in",
+
+    # DEPOSIT / WITHDRAWAL
     "deposit": "deposit",
-    "staking reward": "staking_reward",
-    "staking": "staking_reward",
-    "interest": "staking_reward",
-    "reward": "staking_reward",
-    "dividend": "dividend",
-    "airdrop": "airdrop",
+    "exchange deposit": "deposit",
+    "withdraw": "withdrawal",
+    "withdrawal": "withdrawal",
+    "exchange withdrawal": "withdrawal",
+
+    # TRANSFERS
+    "receive": "transfer_in",
+    "credit": "transfer_in",
+    "send": "transfer_out",
+    "debit": "transfer_out",
+    "administrative debit": "transfer_out",
+    "distribution": "transfer_in",
+
+    # STAKING / REWARDS
+    "staking income": "staking_reward",
+    "reward income": "staking_reward",
+    "interest credit": "staking_reward",
+    "inflation reward": "staking_reward",
+
+    # CONVERSIONS / SWAPS
+    "convert": "swap",
     "conversion": "swap",
-    "swap": "swap",
-    # You can add more as needed
+    "redeem": "swap",
+
+    # NON-TRANSACTIONAL (to be skipped or tagged)
+    "monthly interest summary": "non_transactional",
+
+    # Fallback for empty strings, etc.
+    "": "unknown",
 }
 
 def normalize_transaction_types(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Normalizes the 'type' column of a transaction DataFrame using TRANSACTION_TYPE_MAP.
-
-    Args:
-        df: A pandas DataFrame with a 'type' column containing raw transaction labels.
-
-    Returns:
-        The same DataFrame with a normalized 'type' column.
+    Normalize the 'type' column to a canonical set using TRANSACTION_TYPE_MAP.
+    Any unmapped types are flagged as 'unknown'.
     """
-    df["type"] = (
-        df["type"]
-        .astype(str)
-        .str.lower()
-        .map(TRANSACTION_TYPE_MAP)
-        .fillna("unknown")
-    )
+    raw_types = df["type"].fillna("").astype(str).str.strip().str.lower()
+    mapped = raw_types.map(TRANSACTION_TYPE_MAP)
+    
+    unknowns = raw_types[mapped.isna()].unique()
+    if len(unknowns) > 0:
+        print("⚠️ Unknown transaction types found:")
+        for u in unknowns:
+            print(f"  - '{u}' (consider adding to TRANSACTION_TYPE_MAP)")
+    
+    df["type"] = mapped.fillna("unknown")
     return df
 
+def normalize_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean numeric columns (price, fees, quantity) using a utility function.
+    """
+    for col in ["price", "fees", "quantity"]:
+        if col in df.columns:
+            df[col] = clean_numeric_column(df[col])
+    return df
 
 def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Apply all normalization steps to the transaction data.
-
-    Args:
-        df: A pandas DataFrame of raw or ingested transactions.
-
-    Returns:
-        A normalized DataFrame.
+    Apply all normalization steps: transaction type mapping,
+    timestamp conversion, numeric cleaning, and filtering out non-transactional rows.
     """
     df = normalize_transaction_types(df)
-    # You can add more steps here later (e.g., currency normalization, amount validation)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = normalize_numeric_columns(df)
+    # Filter out rows that are not real transactions (like summaries)
+    df = df[df["type"] != "non_transactional"]
     return df

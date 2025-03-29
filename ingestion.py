@@ -39,3 +39,44 @@ def ingest_csv(file_path: str, mapping: Dict, file_type: str = "") -> pd.DataFra
 
     df["file_type"] = file_type
     return df
+
+def match_file_to_mapping(file_name: str, schema_config: dict):
+    """
+    Matches a given file name against the schema configuration.
+    
+    Returns a tuple (institution, subtype, mapping) if found, otherwise (None, None, None).
+    """
+    for institution, entry in schema_config.items():
+        # Check for direct mapping with a file_pattern
+        if isinstance(entry, dict) and "file_pattern" in entry:
+            if file_name == entry["file_pattern"]:
+                return institution, None, entry["mapping"]
+        # Check for nested mappings (e.g., gemini with staking and transactions)
+        elif isinstance(entry, dict):
+            for sub_key, sub_entry in entry.items():
+                if isinstance(sub_entry, dict) and "file_pattern" in sub_entry:
+                    if file_name == sub_entry["file_pattern"]:
+                        return institution, sub_key, sub_entry["mapping"]
+    return None, None, None
+
+def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
+    config = load_schema_config(config_path)
+    all_files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
+    all_transactions = []
+    for file_name in all_files:
+        file_path = os.path.join(data_dir, file_name)
+        institution, subtype, mapping = match_file_to_mapping(file_name, config)
+        if mapping:
+            file_type = f"{institution}_{subtype}" if subtype else institution
+            df = ingest_csv(file_path, mapping, file_type=file_type)
+            df["user_id"] = 1
+            df["institution"] = institution
+            all_transactions.append(df)
+        else:
+            print(f"⚠️ Skipping unrecognized file: {file_name}")
+    if all_transactions:
+        transactions = pd.concat(all_transactions, ignore_index=True)
+        return transactions
+    else:
+        print("❌ No transactions processed.")
+        return pd.DataFrame()
