@@ -2,7 +2,7 @@
 
 This is a Python-based financial analytics application for tracking portfolio performance, holdings, and tax-relevant metrics across multiple financial institutions — including traditional brokerages, crypto exchanges, and wallets.
 
-Built with `pandas`, `Streamlit`, and modular Python components.
+Built with `pandas`, `Streamlit`, `SQLAlchemy`, and modular Python components.
 
 ---
 
@@ -15,6 +15,9 @@ Built with `pandas`, `Streamlit`, and modular Python components.
 - 🔒 Handles internal transfers between accounts
 - 📊 Streamlit dashboard for interactive visualization
 - 📤 Exports normalized data, gains, cost basis, and time series to CSV
+- 💾 SQLite database for efficient price data storage and retrieval
+- 🔄 Smart asset symbol mapping (e.g., CGLD → CELO, ETH2 → ETH)
+- 📊 Historical price tracking with multiple data sources
 
 ---
 
@@ -23,13 +26,21 @@ Built with `pandas`, `Streamlit`, and modular Python components.
 ```
 portfolio_app/
 ├── config/                 # Schema mapping for each institution
-├── data/                   # Raw CSV input files (not tracked)
+├── data/                   # Raw CSV input files and price data
+│   └── historical_price_data/  # Historical price data files
 ├── output/                 # Auto-generated analytics + exports
 ├── ingestion.py            # Ingest and normalize raw transactions
 ├── normalization.py        # Transaction type mapping, currency standardization, etc.
 ├── analytics.py            # Cost basis, gains/losses, time series tracking
 ├── visualization.py        # Streamlit dashboard
-├── main.py                 # Runs ingestion + export pipeline
+├── app.py                  # Main Streamlit application
+├── database.py            # Database connection and utilities
+├── db.py                  # Database models and schemas
+├── migration.py           # Database migration and data import
+├── price_service.py       # Price data retrieval and management
+├── reporting.py           # Portfolio reporting and analysis
+├── schema.sql             # Database schema definitions
+├── main.py                # Runs ingestion + export pipeline
 ├── requirements.txt
 ├── setup.sh
 ├── .gitignore
@@ -65,9 +76,17 @@ Expected file names:
 
 Make sure they match the format defined in `config/schema_mapping.yaml`.
 
+Historical price data should be placed in `data/historical_price_data/` with the following format:
+- `historical_price_data_daily_[source]_[symbol]USD.csv`
+
 ---
 
 ## ▶️ Run the App
+
+### Initialize database and import price data:
+```bash
+python migration.py
+```
 
 ### Normalize + process data:
 ```bash
@@ -76,7 +95,7 @@ python main.py
 
 ### Launch Streamlit dashboard:
 ```bash
-streamlit run visualization.py
+streamlit run app.py
 ```
 
 ---
@@ -88,6 +107,7 @@ Results will be saved to the `output/` directory:
 - `portfolio_timeseries.csv`
 - `cost_basis_fifo.csv`
 - `cost_basis_avg.csv`
+- `performance_report.csv`
 
 ---
 
@@ -103,13 +123,15 @@ pytest tests/
 
 ## 🔭 Roadmap
 
+- [x] Real-time historical price lookups via CoinGecko
+- [x] Tax report summary (short-term vs long-term gains)
 - [ ] Transfer reconciliation engine
 - [ ] Multi-currency support
-- [ ] Real-time historical price lookups via CoinGecko or CCXT
-- [ ] Tax report summary (short-term vs long-term gains)
 - [ ] Benchmarking against indexes (e.g., S&P 500)
 - [ ] User-defined tagging and notes
 - [ ] API importers (e.g., Coinbase, Robinhood, Gemini)
+- [ ] Price data validation and error handling
+- [ ] Automated price data updates
 
 ---
 
@@ -121,4 +143,4 @@ pytest tests/
 
 ## 📝 License
 
-MIT License
+MIT License 
