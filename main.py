@@ -1,15 +1,12 @@
 import os
 import uuid
 import pandas as pd
+from datetime import datetime
 from ingestion import process_transactions
 from normalization import normalize_data
 from transfers import reconcile_transfers
-from analytics import (
-    compute_portfolio_time_series_with_external_prices,
-    compute_portfolio_time_series,
-    calculate_cost_basis_fifo,
-    calculate_cost_basis_avg,
-)
+from analytics import compute_portfolio_time_series_with_external_prices
+from reporting import PortfolioReporting
 
 def main():
     data_dir = "data"
@@ -51,24 +48,46 @@ def main():
     normalized_transactions.to_csv(normalized_export_path, index=False)
     print(f"✅ Normalized transactions exported to: {normalized_export_path}")
 
-    # Step 7: Portfolio value using external prices (daily valuation)
-    print("📈 Computing portfolio value with external prices...")
-    portfolio_ts = compute_portfolio_time_series_with_external_prices(transactions)
+    # Initialize portfolio reporting
+    print("📊 Initializing portfolio reporting...")
+    reporter = PortfolioReporting(transactions)
+
+    # Step 7: Portfolio value time series
+    print("📈 Computing portfolio value time series...")
+    portfolio_ts = reporter.calculate_portfolio_value()
     portfolio_ts.to_csv(os.path.join(output_dir, "portfolio_timeseries.csv"))
     print("✅ Portfolio time series exported.")
 
-    # Step 8: Cost basis calculations
-    print("📊 Calculating FIFO cost basis...")
-    fifo_cb = calculate_cost_basis_fifo(transactions)
-    fifo_cb.to_csv(os.path.join(output_dir, "cost_basis_fifo.csv"), index=False)
-    print("✅ FIFO cost basis exported.")
+    # Step 8: Generate tax reports
+    print("🧾 Generating tax reports...")
+    current_year = datetime.now().year
+    for year in range(current_year - 2, current_year + 1):
+        tax_lots, summary = reporter.generate_tax_report(year)
+        if not tax_lots.empty:
+            tax_lots.to_csv(os.path.join(output_dir, f"tax_lots_{year}.csv"), index=False)
+            print(f"✅ Tax report for {year} exported:")
+            print(f"   - Total proceeds: ${summary['total_proceeds']:,.2f}")
+            print(f"   - Total gain/loss: ${summary['total_gain_loss']:,.2f}")
+            print(f"   - Short-term gain/loss: ${summary['short_term_gain_loss']:,.2f}")
+            print(f"   - Long-term gain/loss: ${summary['long_term_gain_loss']:,.2f}")
 
-    print("📊 Calculating average cost basis...")
-    avg_cb = calculate_cost_basis_avg(transactions)
-    avg_cb.to_csv(os.path.join(output_dir, "cost_basis_avg.csv"), index=False)
-    print("✅ Average cost basis exported.")
+    # Step 9: Generate performance reports
+    print("\n📊 Generating performance reports...")
+    for period in ["YTD", "1Y", "3Y", "5Y"]:
+        report = reporter.generate_performance_report(period)
+        print(f"\n{period} Performance Summary:")
+        print(f"   - Total Return: {report['metrics']['total_return']:.2f}%")
+        print(f"   - Annualized Return: {report['metrics']['annualized_return']:.2f}%")
+        print(f"   - Volatility: {report['metrics']['volatility']:.2f}%")
+        print(f"   - Sharpe Ratio: {report['metrics']['sharpe_ratio']:.2f}")
+        print(f"   - Max Drawdown: {report['metrics']['max_drawdown']:.2f}%")
+        
+        # Export full report
+        report_path = os.path.join(output_dir, f"performance_report_{period}.csv")
+        pd.DataFrame([report]).to_csv(report_path, index=False)
+        print(f"✅ {period} performance report exported.")
 
-    print("🏁 Pipeline complete.")
+    print("\n🏁 Pipeline complete.")
 
 if __name__ == "__main__":
     main()
