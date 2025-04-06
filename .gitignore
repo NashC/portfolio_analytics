@@ -30,7 +30,8 @@ data/
 *.swp
 *.DS_Store
 
-# Streamlit secrets (if using)
+# Streamlit configuration
+.streamlit/
 .streamlit/secrets.toml
 
 # Environment variables or sensitive config

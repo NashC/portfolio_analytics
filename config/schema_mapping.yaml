@@ -1,15 +1,13 @@
 binanceus:
-  file_pattern: "binanceus_transaction_history.csv"
-  mapping:
-    timestamp: "Time"
-    type: "Category"
-    asset: "Primary Asset"
-    quantity: "Realized Amount For Primary Asset"
-    price: "Realized Amount for Primary Asset in USD"
-    fees: "Realized Amount for Fee Asset in USD"
-    currency: "Quote Asset"
-    source_account: "Withdraw Method"
-    destination_account: "Payment Method"
+  timestamp: "Time"
+  type: "Category"
+  asset: "Primary Asset"
+  quantity: "Realized Amount For Primary Asset"
+  price: "Realized Amount for Primary Asset in USD"
+  fees: "Realized Amount for Fee Asset in USD"
+  currency: "Quote Asset"
+  source_account: "Withdraw Method"
+  destination_account: "Payment Method"
 
 coinbase:
   file_pattern: "coinbase_transaction_history.csv"
@@ -19,6 +17,8 @@ coinbase:
     asset: "Asset"
     quantity: "Quantity Transacted"
     price: "Price at Transaction"
+    subtotal: "Subtotal"
+    total: "Total (inclusive of fees and/or spread)"
     fees: "Fees and/or Spread"
     currency: "Price Currency"
     source_account: ""
@@ -28,10 +28,11 @@ gemini:
   staking:
     file_pattern: "gemini_staking_transaction_history.csv"
     mapping:
-      timestamp: "Date"  # Optionally combine with "Time (UTC)"
+      timestamp: "Date"
+      time: "Time (UTC)"
       type: "Type"
       asset: "Symbol"
-      quantity: "Amount USD"
+      quantity: "Amount {asset}"
       price: "Price USD"
       fees: ""
       currency: "USD"
@@ -41,11 +42,12 @@ gemini:
   transactions:
     file_pattern: "gemini_transaction_history.csv"
     mapping:
-      timestamp: "Date"  # Optionally combine with "Time (UTC)"
+      timestamp: "Date"
+      time: "Time (UTC)"
       type: "Type"
       asset: "Symbol"
-      quantity: "USD Amount USD"
-      price: ""  # Derivable, if needed
+      quantity: "{asset} Amount {asset}"
+      price: "USD Amount USD"
       fees: "Fee (USD) USD"
       currency: "USD"
       source_account: "Withdrawal Destination"

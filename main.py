@@ -9,7 +9,7 @@ from analytics import compute_portfolio_time_series_with_external_prices
 from reporting import PortfolioReporting
 
 def main():
-    data_dir = "data"
+    data_dir = "data/transaction_history"
     config_path = "config/schema_mapping.yaml"
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
@@ -40,8 +40,8 @@ def main():
     # Step 6: Export normalized data (lean format)
     canonical_columns = [
         "transaction_id", "timestamp", "type", "asset", "quantity", "price", "fees",
-        "currency", "source_account", "destination_account", "user_id", "institution",
-        "file_type", "transfer_id", "notes"
+        "subtotal", "total", "currency", "source_account", "destination_account", 
+        "user_id", "institution", "file_type", "transfer_id", "notes"
     ]
     normalized_transactions = transactions[[col for col in canonical_columns if col in transactions.columns]]
     normalized_export_path = os.path.join(output_dir, "transactions_normalized.csv")
@@ -66,7 +66,7 @@ def main():
         if not tax_lots.empty:
             tax_lots.to_csv(os.path.join(output_dir, f"tax_lots_{year}.csv"), index=False)
             print(f"✅ Tax report for {year} exported:")
-            print(f"   - Total proceeds: ${summary['total_proceeds']:,.2f}")
+            print(f"   - Net proceeds: ${summary['net_proceeds']:,.2f}")
             print(f"   - Total gain/loss: ${summary['total_gain_loss']:,.2f}")
             print(f"   - Short-term gain/loss: ${summary['short_term_gain_loss']:,.2f}")
             print(f"   - Long-term gain/loss: ${summary['long_term_gain_loss']:,.2f}")
