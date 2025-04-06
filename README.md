@@ -18,6 +18,17 @@ Built with `pandas`, `Streamlit`, `SQLAlchemy`, and modular Python components.
 - 💾 SQLite database for efficient price data storage and retrieval
 - 🔄 Smart asset symbol mapping (e.g., CGLD → CELO, ETH2 → ETH)
 - 📊 Historical price tracking with multiple data sources
+- 🧾 Comprehensive tax reporting features:
+  - FIFO cost basis calculation
+  - Staking rewards tracking with FMV cost basis
+  - Per-transaction tax lot details
+  - Sales history with cost basis and gain/loss
+  - Short-term vs long-term gain categorization
+  - Tax report CSV export for easy filing
+  - Accurate net proceeds calculation with proper fee handling
+  - Stablecoin transaction exclusion from tax calculations
+  - Detailed transaction breakdown with debug logging
+  - Real-time summary metrics from sales history
 
 ---
 
@@ -125,6 +136,8 @@ pytest tests/
 
 - [x] Real-time historical price lookups via CoinGecko
 - [x] Tax report summary (short-term vs long-term gains)
+- [x] Staking rewards tax lot tracking
+- [x] Detailed sales history with cost basis
 - [ ] Transfer reconciliation engine
 - [ ] Multi-currency support
 - [ ] Benchmarking against indexes (e.g., S&P 500)
@@ -143,4 +156,4 @@ pytest tests/
 
 ## 📝 License
 
-MIT License 
+MIT License
