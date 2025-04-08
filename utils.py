@@ -11,3 +11,11 @@ def clean_numeric_column(series: pd.Series) -> pd.Series:
               .replace("", "0")
     )
     return pd.to_numeric(cleaned, errors="coerce")
+
+def format_currency(value: float) -> str:
+    """Format a number as currency with dollar sign and commas"""
+    return f"${value:,.2f}"
+
+def format_number(value: float) -> str:
+    """Format a number with commas and 2 decimal places"""
+    return f"{value:,.2f}"

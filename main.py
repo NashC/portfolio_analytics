@@ -21,23 +21,19 @@ def main():
         print("🚫 No data to process.")
         return
 
-    # Step 2: Normalize schema and numeric fields
-    print("🔧 Normalizing transactions...")
-    transactions = normalize_data(transactions)
-
-    # Step 3: Reconcile internal transfers
+    # Step 2: Reconcile internal transfers
     print("🔁 Reconciling internal transfers...")
     transactions = reconcile_transfers(transactions)
 
-    # Step 4: Add unique transaction_id for downstream tracing
+    # Step 3: Add unique transaction_id for downstream tracing
     transactions.insert(0, "transaction_id", [str(uuid.uuid4()) for _ in range(len(transactions))])
 
-    # Step 5: Export full raw data (for audits or debugging)
+    # Step 4: Export full raw data (for audits or debugging)
     raw_export_path = os.path.join(output_dir, "transactions_raw.csv")
     transactions.to_csv(raw_export_path, index=False)
     print(f"✅ Full raw transactions exported to: {raw_export_path}")
 
-    # Step 6: Export normalized data (lean format)
+    # Step 5: Export normalized data (lean format)
     canonical_columns = [
         "transaction_id", "timestamp", "type", "asset", "quantity", "price", "fees",
         "subtotal", "total", "currency", "source_account", "destination_account", 
@@ -52,13 +48,13 @@ def main():
     print("📊 Initializing portfolio reporting...")
     reporter = PortfolioReporting(transactions)
 
-    # Step 7: Portfolio value time series
+    # Step 6: Portfolio value time series
     print("📈 Computing portfolio value time series...")
     portfolio_ts = reporter.calculate_portfolio_value()
     portfolio_ts.to_csv(os.path.join(output_dir, "portfolio_timeseries.csv"))
     print("✅ Portfolio time series exported.")
 
-    # Step 8: Generate tax reports
+    # Step 7: Generate tax reports
     print("🧾 Generating tax reports...")
     current_year = datetime.now().year
     for year in range(current_year - 2, current_year + 1):
@@ -71,7 +67,7 @@ def main():
             print(f"   - Short-term gain/loss: ${summary['short_term_gain_loss']:,.2f}")
             print(f"   - Long-term gain/loss: ${summary['long_term_gain_loss']:,.2f}")
 
-    # Step 9: Generate performance reports
+    # Step 8: Generate performance reports
     print("\n📊 Generating performance reports...")
     for period in ["YTD", "1Y", "3Y", "5Y"]:
         report = reporter.generate_performance_report(period)

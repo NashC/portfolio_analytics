@@ -225,12 +225,12 @@ def main():
     # Year selection - use most recently completed year as default
     current_year = datetime.now().year
     available_years = list(range(current_year - 1, current_year - 6, -1))  # Last 5 completed years
-    default_year = current_year - 1  # Most recently completed year
+    default_year = current_year - 1  # Most recently completed year (2024)
     
     year = st.selectbox(
         "Select Tax Year",
         available_years,
-        index=0  # First year (most recent) will be selected by default
+        index=0  # First year (2024) will be selected by default
     )
     
     # Get sales transactions for the selected year

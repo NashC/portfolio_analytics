@@ -70,7 +70,7 @@ class PortfolioReporting:
         # Calculate value for each asset
         for asset in holdings.columns:
             # Get prices for this asset
-            asset_prices = prices[prices['symbol'] == asset].copy()
+            asset_prices = prices[prices['asset'] == asset].copy()
             if asset_prices.empty:
                 print(f"Debug: No prices found for {asset}")
                 continue
@@ -424,49 +424,77 @@ class PortfolioReporting:
         year_lots["acquisition_date"] = year_lots["acquisition_date"].astype(str)
         year_lots["disposal_date"] = year_lots["disposal_date"].dt.strftime("%Y-%m-%d")
         
-        # Get sell transactions for the year to calculate net proceeds
-        sell_transactions = self.transactions[
-            (self.transactions['timestamp'].dt.year == year) &
-            ((self.transactions['type'] == 'sell') | (self.transactions['type'] == 'transfer_out')) &
-            (~self.transactions['asset'].isin(stablecoins))  # Exclude stablecoins
-        ].copy()
-        
-        # Calculate net proceeds from source transactions
-        net_proceeds = 0.0
-        if not sell_transactions.empty:
-            # Convert numeric columns and ensure all values are positive
-            sell_transactions['quantity'] = pd.to_numeric(sell_transactions['quantity'], errors='coerce').abs()
-            sell_transactions['price'] = pd.to_numeric(sell_transactions['price'], errors='coerce').abs()
-            sell_transactions['fees'] = pd.to_numeric(sell_transactions['fees'], errors='coerce').abs()
+        # Get sell transactions for the year to calculate net proceeds and gains/losses
+        sales_df = self.show_sell_transactions_with_lots()
+        if not sales_df.empty:
+            sales_df['date'] = pd.to_datetime(sales_df['date'])
+            year_sales = sales_df[sales_df['date'].dt.year == year].copy()
             
-            # Calculate subtotal if not present
-            if 'subtotal' not in sell_transactions.columns:
-                sell_transactions['subtotal'] = sell_transactions['quantity'] * sell_transactions['price']
+            # Calculate summary statistics from sales history
+            if not year_sales.empty:
+                net_proceeds = year_sales['net_proceeds'].sum()
+                total_cost_basis = year_sales['cost_basis'].sum()
+                total_gain_loss = year_sales['net_profit'].sum()
+                
+                # Calculate short-term and long-term gains based on holding period
+                # For this we need to join with tax lots to get the holding period
+                year_sales['disposal_date'] = year_sales['date']
+                
+                # Filter tax lots for the current year's disposals
+                year_tax_lots = tax_lots[
+                    (tax_lots["disposal_date"].dt.year == year)
+                ].copy()
+                
+                # Calculate short-term and long-term gains from tax lots
+                short_term_gain_loss = year_tax_lots[year_tax_lots["holding_period_days"] <= 365]["gain_loss"].sum()
+                long_term_gain_loss = year_tax_lots[year_tax_lots["holding_period_days"] > 365]["gain_loss"].sum()
+                
+                # Debug print
+                print(f"\nDebug: Short/Long Term Calculation")
+                print(f"Total gain/loss from sales: ${total_gain_loss:,.2f}")
+                print(f"Short-term gain/loss: ${short_term_gain_loss:,.2f}")
+                print(f"Long-term gain/loss: ${long_term_gain_loss:,.2f}")
+                print(f"Sum of short + long: ${short_term_gain_loss + long_term_gain_loss:,.2f}")
+                
+                # Verify the split adds up to total gain/loss
+                gain_loss_diff = abs(total_gain_loss - (short_term_gain_loss + long_term_gain_loss))
+                if gain_loss_diff > 0.01:  # Allow for small rounding differences
+                    print(f"Warning: Gain/loss split does not match total by ${gain_loss_diff:,.2f}")
+                    # If there's a significant difference, proportionally adjust the split
+                    if abs(short_term_gain_loss + long_term_gain_loss) > 0:
+                        adjustment_factor = total_gain_loss / (short_term_gain_loss + long_term_gain_loss)
+                        short_term_gain_loss *= adjustment_factor
+                        long_term_gain_loss *= adjustment_factor
+                        print(f"Adjusted values:")
+                        print(f"Short-term gain/loss: ${short_term_gain_loss:,.2f}")
+                        print(f"Long-term gain/loss: ${long_term_gain_loss:,.2f}")
+                
+                summary = {
+                    "net_proceeds": float(net_proceeds),
+                    "total_cost_basis": float(total_cost_basis),
+                    "total_gain_loss": float(total_gain_loss),
+                    "short_term_gain_loss": float(short_term_gain_loss),
+                    "long_term_gain_loss": float(long_term_gain_loss),
+                    "total_transactions": len(year_sales)
+                }
             else:
-                sell_transactions['subtotal'] = pd.to_numeric(sell_transactions['subtotal'], errors='coerce').abs()
-            
-            # Calculate net proceeds for each transaction and sum
-            sell_transactions['net_proceeds'] = sell_transactions['subtotal'] - sell_transactions['fees']
-            net_proceeds = sell_transactions['net_proceeds'].sum()
-            
-            # Debug print transactions
-            print("\nDebug: Tax Report Sell Transactions:")
-            for _, tx in sell_transactions.iterrows():
-                print(f"{tx['asset']}: Type={tx['type']}, Date={tx['timestamp'].date()}, "  # Convert to date only
-                      f"Quantity={tx['quantity']:.8f}, Price=${tx['price']:.4f}, "
-                      f"Subtotal=${tx['subtotal']:.2f}, Fees=${tx['fees']:.2f}, "
-                      f"Net=${tx['net_proceeds']:.2f}")
-            print(f"Total Net Proceeds: ${net_proceeds:,.2f}")
-        
-        # Calculate summary statistics
-        summary = {
-            "net_proceeds": float(net_proceeds),
-            "total_cost_basis": float(year_lots["cost_basis"].sum()) if not year_lots.empty else 0.0,
-            "total_gain_loss": float(year_lots["gain_loss"].sum()) if not year_lots.empty else 0.0,
-            "short_term_gain_loss": float(year_lots[year_lots["holding_period_days"] <= 365]["gain_loss"].sum()) if not year_lots.empty else 0.0,
-            "long_term_gain_loss": float(year_lots[year_lots["holding_period_days"] > 365]["gain_loss"].sum()) if not year_lots.empty else 0.0,
-            "total_transactions": len(year_lots)
-        }
+                summary = {
+                    "net_proceeds": 0.0,
+                    "total_cost_basis": 0.0,
+                    "total_gain_loss": 0.0,
+                    "short_term_gain_loss": 0.0,
+                    "long_term_gain_loss": 0.0,
+                    "total_transactions": 0
+                }
+        else:
+            summary = {
+                "net_proceeds": 0.0,
+                "total_cost_basis": 0.0,
+                "total_gain_loss": 0.0,
+                "short_term_gain_loss": 0.0,
+                "long_term_gain_loss": 0.0,
+                "total_transactions": 0
+            }
         
         # Debug print
         print(f"\nDebug: Tax Report for {year}")
@@ -669,13 +697,7 @@ class PortfolioReporting:
                     
                     # Update remaining quantity and remove used acquisition lot
                     remaining_quantity -= lot_quantity
-                    if lot_quantity == acquisition_quantity:
-                        acquisition_lots = acquisition_lots.iloc[1:]
-                    else:
-                        # Update the first row's values
-                        acquisition_lots.iloc[0, acquisition_lots.columns.get_loc("quantity")] = acquisition_quantity - lot_quantity
-                        acquisition_lots.iloc[0, acquisition_lots.columns.get_loc("subtotal")] = (acquisition_quantity - lot_quantity) * acquisition_price
-                        acquisition_lots.iloc[0, acquisition_lots.columns.get_loc("fees")] = ((acquisition_quantity - lot_quantity) / acquisition_quantity) * acquisition_fees
+                    acquisition_lots = acquisition_lots.iloc[1:]
                 
                 # Create transaction detail with all required fields
                 detail = {
@@ -761,4 +783,271 @@ class PortfolioReporting:
                 "date", "type", "asset", "quantity", "price", 
                 "subtotal", "fees", "net_proceeds", "cost_basis",
                 "net_profit", "transaction_id", "institution"
-            ]) 
+            ])
+
+    def get_transfer_transactions(self, year=None, asset=None):
+        """Get transfer transactions for the specified year and asset."""
+        # Filter for transfer transactions
+        transfers = self.transactions[
+            (self.transactions['type'].isin(['transfer_in', 'transfer_out']))
+        ].copy()
+        
+        # Add debug logging for DOT transfers
+        dot_transfers = transfers[transfers['asset'] == 'DOT'].copy()
+        if not dot_transfers.empty:
+            print("\nDebug: DOT Transfers:")
+            for _, row in dot_transfers.iterrows():
+                print(f"\nTransfer Details:")
+                print(f"  Date: {row['date']}")
+                print(f"  Exchange: {row['institution']}")
+                print(f"  Type: {row['type']}")
+                print(f"  Quantity: {row['quantity']}")
+                print(f"  Price: {row['price']}")
+                print(f"  Subtotal: {row['subtotal']}")
+                print(f"  Fees: {row['fees']}")
+        
+        # Continue with existing code
+        if year is not None:
+            transfers = transfers[transfers['date'].dt.year == year]
+        
+        if asset is not None and asset != "All Assets":
+            transfers = transfers[transfers['asset'] == asset]
+        
+        # For Binance US transfer-out transactions, use the total value directly
+        # For other transactions, calculate subtotal using price * quantity
+        transfers['subtotal'] = transfers.apply(
+            lambda row: row['price'] if (  # Use total value directly for Binance transfer-out
+                row['type'] == 'transfer_out' and 
+                row['institution'] == 'binanceus' and 
+                pd.notna(row['price'])
+            ) else (  # Calculate subtotal normally for other cases
+                abs(row['quantity']) * row['price'] if pd.notna(row['price']) and pd.notna(row['quantity']) else 0
+            ),
+            axis=1
+        )
+        
+        # Store original price before any modifications
+        transfers['original_price'] = transfers['price']
+        
+        # For Binance transfer-out transactions, calculate the correct per-unit price
+        transfers['price'] = transfers.apply(
+            lambda row: (row['price'] / abs(row['quantity'])) if (  # Calculate per-unit price for Binance transfer-out
+                row['type'] == 'transfer_out' and 
+                row['institution'] == 'binanceus' and 
+                pd.notna(row['price']) and 
+                pd.notna(row['quantity']) and 
+                abs(row['quantity']) > 0
+            ) else row['price'],  # Keep original price for other cases
+            axis=1
+        )
+        
+        # Calculate cost basis for each transfer
+        transfers['cost_basis'] = transfers.apply(
+            lambda row: self._calculate_transfer_cost_basis(row),
+            axis=1
+        )
+        
+        # Calculate net proceeds for send transfers (similar to sells)
+        transfers['net_proceeds'] = transfers.apply(
+            lambda row: row['subtotal'] - row['fees'] if row['type'] == 'transfer_out' else 0,
+            axis=1
+        )
+        
+        # Add source and destination exchange information
+        transfers['source_exchange'] = transfers.apply(
+            lambda row: row['institution'] if row['type'] == 'transfer_out' else '',
+            axis=1
+        )
+        transfers['destination_exchange'] = transfers.apply(
+            lambda row: row['institution'] if row['type'] == 'transfer_in' else '',
+            axis=1
+        )
+        
+        # Ensure all required columns exist
+        required_columns = [
+            'date', 'type', 'asset', 'quantity', 'price', 
+            'subtotal', 'fees', 'cost_basis', 'net_proceeds', 
+            'source_exchange', 'destination_exchange'
+        ]
+        
+        for col in required_columns:
+            if col not in transfers.columns:
+                if col == 'date':
+                    transfers['date'] = transfers['timestamp'].dt.strftime('%Y-%m-%d')
+                elif col in ['source_exchange', 'destination_exchange']:
+                    transfers[col] = ''
+                else:
+                    transfers[col] = 0.0
+        
+        # Format numeric columns
+        numeric_columns = ['quantity', 'price', 'subtotal', 'fees', 'cost_basis', 'net_proceeds']
+        for col in numeric_columns:
+            transfers[col] = pd.to_numeric(transfers[col], errors='coerce').fillna(0.0)
+            
+        # Debug print final calculations
+        print("\nDebug: Final transfer calculations:")
+        for _, row in transfers.iterrows():
+            print(f"{row['asset']} {row['type']} on {row['date']}:")
+            print(f"  Quantity: {abs(row['quantity']):.8f}")
+            print(f"  Price per unit: ${row['price']:.4f}")
+            print(f"  Subtotal: ${row['subtotal']:.2f}")
+            print(f"  Fees: ${row['fees']:.2f}")
+            print(f"  Cost Basis: ${row['cost_basis']:.2f}")
+            print(f"  Net Proceeds: ${row['net_proceeds']:.2f}")
+        
+        return transfers.sort_values('date', ascending=False)
+    
+    def _calculate_transfer_cost_basis(self, transaction: pd.Series) -> float:
+        """Calculate cost basis for a transfer transaction."""
+        if transaction['asset'] == 'DOT':
+            print(f"\nDebug: Processing DOT transfer:")
+            print(f"  Date: {transaction['date']}")
+            print(f"  Exchange: {transaction['institution']}")
+            print(f"  Type: {transaction['type']}")
+            print(f"  Quantity: {transaction['quantity']}")
+            # Use original price for Binance transfer-out
+            price_to_use = transaction.get('original_price', transaction['price'])
+            print(f"  Price field: {price_to_use}")
+            print(f"  Subtotal: {transaction['subtotal']}")
+            print(f"  Fees: {transaction['fees']}")
+
+        quantity = abs(float(transaction["quantity"]))
+        asset = transaction["asset"]
+        
+        # For Binance US transfer-out transactions, the price field contains the total USD amount
+        if (transaction['type'] == 'transfer_out' and 
+            transaction['institution'] == 'binanceus' and 
+            pd.notna(transaction.get('original_price', transaction['price']))):
+            # For Binance transfer-out, use original price which contains the total amount
+            total_amount = transaction.get('original_price', transaction['price'])
+            # Calculate the actual price per unit for logging
+            price_per_unit = total_amount / quantity if quantity > 0 else 0
+            cost_basis = total_amount
+            if asset == 'DOT':
+                print(f"\nBinance transfer-out calculation:")
+                print(f"- Total USD amount from price field: ${total_amount:.2f}")
+                print(f"- Quantity: {quantity:.8f}")
+                print(f"- Actual price per unit: ${price_per_unit:.4f}")
+                print(f"- Cost basis: ${cost_basis:.2f}")
+        # For Coinbase transfer-in transactions, use the price per unit
+        elif (transaction['type'] == 'transfer_in' and 
+              transaction['institution'] == 'coinbase' and 
+              pd.notna(transaction['price'])):
+            # Calculate cost basis using price per unit
+            cost_basis = quantity * transaction['price']
+            # Add fees if present
+            fees = abs(float(transaction["fees"])) if pd.notna(transaction["fees"]) else 0.0
+            cost_basis += fees
+            if asset == 'DOT':
+                print(f"\nCoinbase transfer-in calculation:")
+                print(f"- Using price per unit: ${transaction['price']:.4f}")
+                print(f"- Quantity: {quantity:.8f}")
+                print(f"- Subtotal: ${cost_basis - fees:.2f}")
+                print(f"- Fees: ${fees:.2f}")
+                print(f"- Total cost basis: ${cost_basis:.2f}")
+        else:
+            # Get market price from price service for other cases
+            transfer_date = transaction["timestamp"].replace(tzinfo=None)
+            prices_df = price_service.get_multi_asset_prices(
+                [asset], 
+                transfer_date,
+                transfer_date
+            )
+            
+            market_price_per_unit = 0.0
+            if not prices_df.empty:
+                market_price_per_unit = float(prices_df.iloc[0]["price"])
+                if asset == 'DOT':
+                    print(f"\nMarket price calculation:")
+                    print(f"- Date used for price lookup: {transfer_date}")
+                    print(f"- Market price from price service: ${market_price_per_unit:.4f}")
+                    print(f"- Price data source: {prices_df.iloc[0].get('source', 'unknown')}")
+            
+            # Calculate cost basis using market price
+            cost_basis = quantity * market_price_per_unit
+            
+            # Add fees to cost basis for transfer-in transactions
+            if transaction['type'] == 'transfer_in':
+                fees = abs(float(transaction["fees"])) if pd.notna(transaction["fees"]) else 0.0
+                cost_basis += fees
+                
+            if asset == 'DOT':
+                print(f"- Final cost basis: ${cost_basis:.2f}")
+                print(f"- Cost basis per unit: ${cost_basis/quantity if quantity > 0 else 0:.4f}")
+        
+        return cost_basis
+
+    def _calculate_sell_cost_basis(self, sell: pd.Series) -> float:
+        """Calculate cost basis for a sell/transfer_out transaction by finding matching buy lots"""
+        # Get quantity that needs to be matched with buys
+        sell_quantity = abs(float(sell["quantity"]))
+        
+        # Find all acquisition transactions (buys, transfers in, staking rewards) before this sell
+        acquisitions = self.transactions[
+            (self.transactions["asset"] == sell["asset"]) &
+            (self.transactions["type"].isin(["buy", "transfer_in", "staking_reward"])) &
+            (self.transactions["timestamp"] <= sell["timestamp"])
+        ].copy()
+        
+        total_cost_basis = 0.0
+        remaining_quantity = sell_quantity
+        
+        while remaining_quantity > 0 and not acquisitions.empty:
+            acquisition = acquisitions.iloc[0]
+            acquisition_quantity = abs(float(acquisition["quantity"]))
+            
+            # Handle cost basis based on transaction type
+            if acquisition["type"] == "staking_reward":
+                # Staking rewards have zero cost basis
+                acquisition_price = 0.0
+                acquisition_subtotal = 0.0
+                acquisition_fees = 0.0
+                acquisition_cost_basis = 0.0
+            else:
+                # Get acquisition price and calculate cost basis
+                acquisition_price = abs(float(acquisition["price"])) if pd.notna(acquisition["price"]) else 0.0
+                
+                # Use source subtotal if available, otherwise calculate
+                if "subtotal" in acquisition and pd.notna(acquisition["subtotal"]):
+                    acquisition_subtotal = abs(float(acquisition["subtotal"]))
+                else:
+                    acquisition_subtotal = acquisition_quantity * acquisition_price
+                
+                acquisition_fees = abs(float(acquisition["fees"])) if pd.notna(acquisition["fees"]) else 0.0
+                acquisition_cost_basis = acquisition_subtotal + acquisition_fees
+            
+            # Calculate cost basis per unit
+            cost_basis_per_unit = acquisition_cost_basis / acquisition_quantity if acquisition_quantity > 0 else 0.0
+            
+            # Determine how much of this lot to use
+            lot_quantity = min(remaining_quantity, acquisition_quantity)
+            lot_cost_basis = lot_quantity * cost_basis_per_unit
+            
+            # Add to total cost basis
+            total_cost_basis += lot_cost_basis
+            
+            # Update remaining quantity and remove used acquisition lot
+            remaining_quantity -= lot_quantity
+            acquisitions = acquisitions.iloc[1:]
+        
+        return total_cost_basis
+
+    def get_all_transactions(self) -> pd.DataFrame:
+        """Get all transactions"""
+        return self.transactions.copy()
+        
+    def get_portfolio_summary(self) -> Dict:
+        """Get portfolio summary metrics"""
+        return {
+            "total_value": 0.0,
+            "total_cost_basis": 0.0,
+            "total_unrealized_pl": 0.0
+        }
+        
+    def get_asset_allocation(self) -> pd.DataFrame:
+        """Get current asset allocation"""
+        return pd.DataFrame(columns=["asset", "value", "percentage"])
+        
+    def get_recent_transactions(self) -> pd.DataFrame:
+        """Get recent transactions"""
+        return self.transactions.tail(5).copy() 
