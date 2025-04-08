@@ -31,6 +31,9 @@ def load_data():
 def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol: str = "All Assets"):
     """Display tax report for the specified year"""
     try:
+        # Add timestamp to filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
         tax_lots, summary = reporter.generate_tax_report(year)
         
         if tax_lots.empty:
@@ -97,6 +100,20 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
                     year_sales[col] = year_sales[col].apply(lambda x: f"${x:,.2f}")
                 
                 st.dataframe(year_sales, hide_index=True, use_container_width=True)
+                
+                # Download sales history CSV
+                if 'institution' in year_sales.columns:
+                    year_sales['Exchange'] = year_sales['institution']
+                else:
+                    year_sales['Exchange'] = ""
+                
+                sales_csv = year_sales.to_csv(index=False)
+                st.download_button(
+                    label="Download Sales History (CSV)",
+                    data=sales_csv,
+                    file_name=f"sales_history_{year}_{timestamp}.csv",
+                    mime="text/csv"
+                )
             else:
                 st.info(f"No sales found for {selected_symbol} in {year}")
         else:
@@ -105,13 +122,34 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
         # Display detailed tax lots
         st.subheader("Detailed Tax Lots")
         
-        # Add download button for CSV
-        csv = tax_lots.to_csv(index=False)
-        st.download_button(
-            label="Download Tax Report (CSV)",
-            data=csv,
-            file_name=f"tax_report_{year}.csv",
-            mime="text/csv"
+        # Format tax lots for CSV download
+        csv_cols = [
+            'asset', 'quantity', 'acquisition_date', 'disposal_date',
+            'acquisition_exchange', 'disposal_exchange',
+            'proceeds', 'fees', 'cost_basis', 'gain_loss', 'holding_period_days'
+        ]
+        
+        csv_names = {
+            'asset': 'Asset',
+            'quantity': 'Quantity',
+            'acquisition_date': 'Acquisition Date',
+            'disposal_date': 'Disposal Date',
+            'acquisition_exchange': 'Acquisition Exchange',
+            'disposal_exchange': 'Disposal Exchange',
+            'proceeds': 'Proceeds',
+            'fees': 'Fees',
+            'cost_basis': 'Cost Basis',
+            'gain_loss': 'Gain/Loss',
+            'holding_period_days': 'Holding Period (Days)'
+        }
+        
+        # Create formatted DataFrame for CSV
+        csv_df = tax_lots[csv_cols].copy()
+        csv_df.columns = [csv_names[col] for col in csv_cols]
+        
+        # Add holding term classification to CSV
+        csv_df['Holding Term'] = csv_df['Holding Period (Days)'].apply(
+            lambda x: 'Short Term' if x <= 365 else 'Long Term'
         )
         
         # Display paginated tax lots
@@ -144,6 +182,11 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
         display_df = tax_lots[display_cols].copy()
         display_df.columns = [display_names[col] for col in display_cols]
         
+        # Add holding period classification
+        display_df['Holding Period'] = display_df['Holding Period (Days)'].apply(
+            lambda x: 'Short-term' if x <= 365 else 'Long-term'
+        )
+        
         # Format dollar columns
         dollar_columns = ['Proceeds', 'Fees', 'Cost Basis', 'Gain/Loss']
         for col in dollar_columns:
@@ -153,6 +196,15 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
             display_df.iloc[start_idx:end_idx],
             hide_index=True,
             use_container_width=True
+        )
+        
+        # Download tax lots CSV
+        csv_data = csv_df.to_csv(index=False)
+        st.download_button(
+            label="Download Tax Lots (CSV)",
+            data=csv_data,
+            file_name=f"tax_lots_{year}_{timestamp}.csv",
+            mime="text/csv"
         )
         
     except Exception as e:

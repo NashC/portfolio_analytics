@@ -246,6 +246,8 @@ class PortfolioReporting:
                         "disposal_date": disposal["timestamp"].date(),
                         "acquisition_type": acquisition["type"],
                         "disposal_type": disposal["type"],
+                        "acquisition_exchange": acquisition["institution"] if "institution" in acquisition else "",
+                        "disposal_exchange": disposal["institution"] if "institution" in disposal else "",
                         "cost_basis": lot_cost_basis,
                         "fees": lot_fees,
                         "proceeds": lot_proceeds,
