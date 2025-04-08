@@ -26,6 +26,8 @@ TRANSACTION_TYPE_MAP = {
     "Withdrawal": "withdrawal",
     "exchange withdrawal": "withdrawal",
     "Exchange Withdrawal": "withdrawal",
+    "Crypto Deposit": "transfer_in",  # Binance specific
+    "Crypto Withdrawal": "transfer_out",  # Binance specific
 
     # TRANSFERS
     "receive": "transfer_in",
@@ -40,6 +42,12 @@ TRANSACTION_TYPE_MAP = {
     "Administrative Debit": "transfer_out",
     "distribution": "transfer_in",
     "Distribution": "transfer_in",
+    "Transfer": "transfer_out",  # Coinbase specific
+    "Transfer from Coinbase": "transfer_in",  # Coinbase specific
+    "Transfer to Coinbase": "transfer_out",  # Coinbase specific
+    "Coinbase Pro Transfer": "transfer_out",  # Coinbase specific
+    "Coinbase Pro Transfer In": "transfer_in",  # Coinbase specific
+    "Coinbase Pro Transfer Out": "transfer_out",  # Coinbase specific
 
     # STAKING / REWARDS
     "staking income": "staking_reward",
@@ -72,20 +80,122 @@ def normalize_transaction_types(df: pd.DataFrame) -> pd.DataFrame:
     Normalize the 'type' column to a canonical set using TRANSACTION_TYPE_MAP.
     Any unmapped types are flagged as 'unknown'.
     """
-    # Convert raw types to lowercase
+    print("\n=== Starting Transaction Type Normalization ===")
+    print(f"Total transactions to process: {len(df)}")
+    
+    # Debug print raw transaction types
+    print("\nRaw transaction types before normalization:")
     raw_types = df["type"].fillna("").astype(str).str.strip()
+    print(raw_types.value_counts())
+    
+    # Initialize mapped types as unknown
+    mapped = pd.Series("unknown", index=df.index)
+    
+    # Handle Binance specific cases first
+    if any(col.lower() == "operation" for col in df.columns):
+        operation_col = next(col for col in df.columns if col.lower() == "operation")
+        print("\nBinance operations found:")
+        operations = df[operation_col].fillna("").astype(str).str.strip()
+        print(operations.value_counts())
+        
+        # Create a mask for crypto transfers
+        crypto_deposit_mask = (operations.str.lower() == "crypto deposit")
+        crypto_withdrawal_mask = (operations.str.lower() == "crypto withdrawal")
+        
+        # Map crypto transfers
+        mapped[crypto_deposit_mask] = "transfer_in"
+        mapped[crypto_withdrawal_mask] = "transfer_out"
+        
+        print("\nAfter Binance transfer mapping:")
+        print(mapped.value_counts())
+    
+    # Handle Coinbase specific cases
+    if "Transaction Type" in df.columns:
+        print("\nCoinbase transaction types found:")
+        coinbase_types = df["Transaction Type"].fillna("").astype(str).str.strip()
+        print(coinbase_types.value_counts())
+        
+        # For Coinbase, check for transfer-related transaction types
+        transfer_in_mask = coinbase_types.str.lower().isin([
+            "transfer from coinbase",
+            "coinbase pro transfer in"
+        ])
+        transfer_out_mask = coinbase_types.str.lower().isin([
+            "transfer",
+            "transfer to coinbase",
+            "coinbase pro transfer",
+            "coinbase pro transfer out"
+        ])
+        
+        # Map Coinbase transfers
+        mapped[transfer_in_mask] = "transfer_in"
+        mapped[transfer_out_mask] = "transfer_out"
+        
+        print("\nAfter Coinbase transfer mapping:")
+        print(mapped.value_counts())
     
     # Create case-insensitive mapping by converting all keys to lowercase
     case_insensitive_map = {k.lower(): v for k, v in TRANSACTION_TYPE_MAP.items()}
-    mapped = raw_types.str.lower().map(case_insensitive_map)
     
-    unknowns = raw_types[mapped.isna()].unique()
+    # Map remaining transaction types (excluding transfers)
+    remaining_mask = mapped == "unknown"
+    if remaining_mask.any():
+        # For remaining transactions, try to map from the type column
+        raw_types_lower = raw_types[remaining_mask].str.lower()
+        mapped[remaining_mask] = raw_types_lower.map(case_insensitive_map).fillna("unknown")
+        
+        print("\nAfter general mapping:")
+        print(mapped.value_counts())
+        
+        # For any remaining unknowns, try to infer from other columns
+        still_unknown = mapped == "unknown"
+        if still_unknown.any():
+            print("\nAttempting to infer types for remaining unknown transactions...")
+            
+            # If we have a positive quantity and price, it's likely a buy
+            buy_mask = (still_unknown & 
+                       (df["quantity"] > 0) & 
+                       (df["price"] > 0) & 
+                       (~df["asset"].isin(["USD", "USDC"])))
+            mapped[buy_mask] = "buy"
+            
+            # If we have a negative quantity and price, it's likely a sell
+            sell_mask = (still_unknown & 
+                        (df["quantity"] < 0) & 
+                        (df["price"] > 0) & 
+                        (~df["asset"].isin(["USD", "USDC"])))
+            mapped[sell_mask] = "sell"
+            
+            # If it's a USD/USDC transaction with positive quantity, it's likely a deposit
+            deposit_mask = (still_unknown & 
+                          (df["quantity"] > 0) & 
+                          (df["asset"].isin(["USD", "USDC"])))
+            mapped[deposit_mask] = "deposit"
+            
+            # If it's a USD/USDC transaction with negative quantity, it's likely a withdrawal
+            withdrawal_mask = (still_unknown & 
+                             (df["quantity"] < 0) & 
+                             (df["asset"].isin(["USD", "USDC"])))
+            mapped[withdrawal_mask] = "withdrawal"
+            
+            print("\nAfter type inference:")
+            print(mapped.value_counts())
+    
+    # Check for any remaining unknown types
+    unknowns = raw_types[mapped == "unknown"].unique()
     if len(unknowns) > 0:
-        print("⚠️ Unknown transaction types found:")
+        print("\n⚠️ Unknown transaction types found:")
         for u in unknowns:
-            print(f"  - '{u}' (consider adding to TRANSACTION_TYPE_MAP)")
+            if u:  # Only print non-empty unknown types
+                print(f"  - '{u}' (consider adding to TRANSACTION_TYPE_MAP)")
+            else:
+                print("  - Empty/missing type field found")
     
-    df["type"] = mapped.fillna("unknown")
+    df["type"] = mapped
+    print("\n=== Transaction Type Normalization Complete ===")
+    print(f"Final transaction type distribution:")
+    print(df["type"].value_counts())
+    print("\n")
     return df
 
 def normalize_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:

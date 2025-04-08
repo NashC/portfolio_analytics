@@ -1,13 +1,21 @@
 binanceus:
-  timestamp: "Time"
-  type: "Category"
-  asset: "Primary Asset"
-  quantity: "Realized Amount For Primary Asset"
-  price: "Realized Amount for Primary Asset in USD"
-  fees: "Realized Amount for Fee Asset in USD"
-  currency: "Quote Asset"
-  source_account: "Withdraw Method"
-  destination_account: "Payment Method"
+  file_pattern: "binanceus_transaction_history.csv"
+  mapping:
+    timestamp: "Time"
+    type: "Operation"
+    operation: "Operation"
+    asset: "Primary Asset"
+    quantity: "Realized Amount For Primary Asset"
+    price: "Realized Amount for Primary Asset in USD"
+    fees: "Realized Amount for Fee Asset in USD"
+    currency: "Quote Asset"
+    source_account: "Withdraw Method"
+    destination_account: "Payment Method"
+  transaction_type_map:
+    "Crypto Withdrawal": "transfer_out"
+    "Crypto Deposit": "transfer_in"
+    "Buy": "buy"
+    "Sell": "sell"
 
 coinbase:
   file_pattern: "coinbase_transaction_history.csv"

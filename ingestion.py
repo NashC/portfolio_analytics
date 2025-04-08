@@ -3,6 +3,7 @@ import glob
 import pandas as pd
 import yaml
 from typing import Dict, Optional
+import numpy as np
 
 
 def load_schema_config(config_path: str) -> Dict:
@@ -116,9 +117,14 @@ def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
                 df_asset['price'] = 0.0  # Default to 0
                 usd_mask = df_asset['Type'].isin(['Buy', 'Sell'])
                 if usd_mask.any():
-                    prices = df_asset.loc[usd_mask, 'USD Amount USD'].fillna('$0.00')
-                    prices = prices.str.replace('$', '').str.replace(',', '').str.strip(' ()')
-                    df_asset.loc[usd_mask, 'price'] = pd.to_numeric(prices, errors='coerce').fillna(0)
+                    # Get USD amounts and quantities
+                    usd_amounts = df_asset.loc[usd_mask, 'USD Amount USD'].fillna('$0.00')
+                    usd_amounts = pd.to_numeric(usd_amounts.str.replace('$', '').str.replace(',', '').str.strip(' ()'), errors='coerce').fillna(0)
+                    quantities = pd.to_numeric(df_asset.loc[usd_mask, 'quantity'], errors='coerce').fillna(0)
+                    
+                    # Calculate price per unit by dividing USD amount by quantity
+                    # Avoid division by zero by setting price to 0 where quantity is 0
+                    df_asset.loc[usd_mask, 'price'] = np.where(quantities != 0, usd_amounts / quantities, 0)
                 
                 # Handle fees
                 df_asset['fees'] = 0.0
