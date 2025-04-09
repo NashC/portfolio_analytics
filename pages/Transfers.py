@@ -18,168 +18,163 @@ st.set_page_config(
 )
 
 def display_transfers(reporter: PortfolioReporting):
-    """Display transfers page with send and receive transactions"""
+    """Display transfer transactions with matching information"""
     st.title("Transfers")
     
-    # Get all transfer transactions
+    # Get all transfers
     transfers_df = reporter.get_transfer_transactions()
     
-    if transfers_df.empty:
-        st.info("No transfer transactions found")
-        return
+    # Add year filter
+    years = ["All Years"] + sorted(transfers_df['timestamp'].dt.year.unique().tolist(), reverse=True)
+    selected_year = st.selectbox("Select Year", years)
     
-    # Convert date to datetime for filtering
-    transfers_df['date'] = pd.to_datetime(transfers_df['date'])
+    # Filter by year if not "All Years"
+    if selected_year != "All Years":
+        transfers_df = transfers_df[transfers_df['timestamp'].dt.year == selected_year]
     
-    # Get unique years for filtering
-    years = sorted(transfers_df['date'].dt.year.unique(), reverse=True)
-    selected_year = st.selectbox("Select Year", years, index=0)
-    
-    # Get unique assets for filtering
+    # Add asset filter
     assets = ["All Assets"] + sorted(transfers_df['asset'].unique().tolist())
-    selected_asset = st.selectbox("Select Asset", assets, index=0)
+    selected_asset = st.selectbox("Select Asset", assets)
     
-    # Filter transfers for selected year and asset
-    year_transfers = transfers_df[transfers_df['date'].dt.year == selected_year]
-    
+    # Filter by asset if not "All Assets"
     if selected_asset != "All Assets":
-        year_transfers = year_transfers[year_transfers['asset'] == selected_asset]
-    
-    if year_transfers.empty:
-        st.info(f"No transfers found for {selected_asset} in {selected_year}")
-        return
-    
-    # Convert date back to string format (YYYY-MM-DD)
-    year_transfers['date'] = year_transfers['date'].dt.strftime("%Y-%m-%d")
+        transfers_df = transfers_df[transfers_df['asset'] == selected_asset]
     
     # Split into send and receive transfers
-    send_transfers = year_transfers[year_transfers['type'] == 'transfer_out']
-    receive_transfers = year_transfers[year_transfers['type'] == 'transfer_in']
+    send_df = transfers_df[transfers_df['type'] == 'transfer_out'].copy()
+    receive_df = transfers_df[transfers_df['type'] == 'transfer_in'].copy()
     
-    # Display Send Transfers
-    st.subheader("Send Transfers")
-    if not send_transfers.empty:
-        # Calculate cost basis per unit
-        send_display_df = send_transfers.copy()
-        send_display_df['cost_basis_per_unit'] = send_display_df.apply(
-            lambda row: row['cost_basis'] / row['quantity'] if row['quantity'] != 0 else 0,
-            axis=1
-        )
-        
-        # Rename columns for display
-        send_display_names = {
-            'date': 'Date',
-            'asset': 'Asset',
-            'quantity': 'Quantity',
-            'price': 'Price',
-            'subtotal': 'Subtotal',
-            'fees': 'Fees',
-            'cost_basis': 'Cost Basis',
-            'cost_basis_per_unit': 'Cost/Unit',
-            'net_proceeds': 'Net Proceeds',
-            'source_exchange': 'Source',
-            'destination_exchange': 'Destination'
-        }
-        
-        # Select only the columns we want to display
-        display_columns = ['date', 'asset', 'quantity', 'price', 'subtotal', 'fees', 'cost_basis', 'cost_basis_per_unit', 'net_proceeds', 'source_exchange', 'destination_exchange']
-        send_display_df = send_display_df[display_columns].copy()
-        
-        send_display_df.columns = [send_display_names[col] for col in send_display_df.columns]
-        
-        # Format dollar columns
-        dollar_columns = ['Price', 'Subtotal', 'Fees', 'Cost Basis', 'Cost/Unit', 'Net Proceeds']
-        for col in dollar_columns:
-            send_display_df[col] = send_display_df[col].apply(lambda x: f"${x:,.2f}")
-        
-        st.dataframe(send_display_df, hide_index=True, use_container_width=True)
-        
-        # Download send transfers CSV
-        send_csv = send_transfers.to_csv(index=False)
-        st.download_button(
-            label="Download Send Transfers (CSV)",
-            data=send_csv,
-            file_name=f"send_transfers_{selected_year}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
+    # Ensure quantities are displayed as positive for both send and receive
+    send_df['quantity'] = send_df['quantity'].abs()
+    receive_df['quantity'] = receive_df['quantity'].abs()
+    
+    # Ensure cost_basis column exists
+    if 'cost_basis' not in send_df.columns:
+        send_df['cost_basis'] = 0.0
+    if 'cost_basis' not in receive_df.columns:
+        receive_df['cost_basis'] = 0.0
+    
+    # Calculate cost basis per unit
+    send_df['cost_basis_per_unit'] = send_df.apply(lambda row: row['cost_basis'] / row['quantity'] if row['quantity'] != 0 else 0, axis=1)
+    receive_df['cost_basis_per_unit'] = receive_df.apply(lambda row: row['cost_basis'] / row['quantity'] if row['quantity'] != 0 else 0, axis=1)
+    
+    # Format and display send transfers
+    st.header("Send Transfers")
+    send_display_df = send_df[[
+        'timestamp', 'asset', 'quantity', 'price', 'subtotal', 'fees',
+        'cost_basis', 'cost_basis_per_unit', 'net_proceeds', 'institution'
+    ]].copy()
+    
+    # Add destination and status columns if matching_institution exists
+    if 'matching_institution' in send_df.columns:
+        send_display_df['destination'] = send_df['matching_institution'].fillna('')
+        send_display_df['status'] = send_df['matching_institution'].apply(
+            lambda x: '✅ Matched' if pd.notna(x) else '❌ Unmatched'
         )
     else:
-        st.info("No send transfers found")
+        send_display_df['destination'] = ''
+        send_display_df['status'] = '❓ Unknown'
     
-    # Display Receive Transfers
-    st.subheader("Receive Transfers")
-    if not receive_transfers.empty:
-        # Calculate cost basis per unit
-        receive_display_df = receive_transfers.copy()
-        receive_display_df['cost_basis_per_unit'] = receive_display_df.apply(
-            lambda row: row['cost_basis'] / row['quantity'] if row['quantity'] != 0 else 0,
-            axis=1
-        )
-        
-        # Rename columns for display
-        receive_display_names = {
-            'date': 'Date',
-            'asset': 'Asset',
-            'quantity': 'Quantity',
-            'price': 'Price',
-            'subtotal': 'Subtotal',
-            'fees': 'Fees',
-            'cost_basis': 'Cost Basis',
-            'cost_basis_per_unit': 'Cost/Unit',
-            'source_exchange': 'Source',
-            'destination_exchange': 'Destination'
-        }
-        
-        # Select only the columns we want to display
-        display_columns = ['date', 'asset', 'quantity', 'price', 'subtotal', 'fees', 'cost_basis', 'cost_basis_per_unit', 'source_exchange', 'destination_exchange']
-        receive_display_df = receive_display_df[display_columns].copy()
-        
-        receive_display_df.columns = [receive_display_names[col] for col in receive_display_df.columns]
-        
-        # Format dollar columns
-        dollar_columns = ['Price', 'Subtotal', 'Fees', 'Cost Basis', 'Cost/Unit']
-        for col in dollar_columns:
-            receive_display_df[col] = receive_display_df[col].apply(lambda x: f"${x:,.2f}")
-        
-        st.dataframe(receive_display_df, hide_index=True, use_container_width=True)
-        
-        # Download receive transfers CSV
-        receive_csv = receive_transfers.to_csv(index=False)
+    # Rename columns and format timestamp
+    send_display_df = send_display_df.rename(columns={
+        'timestamp': 'Date',
+        'asset': 'Asset',
+        'quantity': 'Quantity',
+        'price': 'Price',
+        'subtotal': 'Subtotal',
+        'fees': 'Fees',
+        'cost_basis': 'Cost Basis',
+        'cost_basis_per_unit': 'Cost/Unit',
+        'net_proceeds': 'Net Proceeds',
+        'institution': 'Source',
+        'destination': 'Destination',
+        'status': 'Status'
+    })
+    send_display_df['Date'] = send_display_df['Date'].dt.strftime('%Y-%m-%d')
+    
+    # Display send transfers
+    st.dataframe(send_display_df.style.format({
+        'Quantity': '{:.4f}',
+        'Price': '${:.2f}',
+        'Subtotal': '${:.2f}',
+        'Fees': '${:.2f}',
+        'Cost Basis': '${:.2f}',
+        'Cost/Unit': '${:.2f}',
+        'Net Proceeds': '${:.2f}'
+    }))
+    
+    # Add download button for send transfers
+    if not send_display_df.empty:
+        csv = send_display_df.to_csv(index=False)
+        year_suffix = f"_{selected_year}" if selected_year != "All Years" else "_all_years"
+        asset_suffix = f"_{selected_asset}" if selected_asset != "All Assets" else "_all_assets"
+        filename = f"send_transfers{year_suffix}{asset_suffix}.csv"
         st.download_button(
-            label="Download Receive Transfers (CSV)",
-            data=receive_csv,
-            file_name=f"receive_transfers_{selected_year}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
+            "Download Send Transfers CSV",
+            csv,
+            filename,
+            "text/csv",
+            key='download-send-csv'
+        )
+    
+    # Format and display receive transfers
+    st.header("Receive Transfers")
+    receive_display_df = receive_df[[
+        'timestamp', 'asset', 'quantity', 'price', 'subtotal', 'fees',
+        'cost_basis', 'cost_basis_per_unit', 'net_proceeds', 'institution'
+    ]].copy()
+    
+    # Add source and status columns if matching_institution exists
+    if 'matching_institution' in receive_df.columns:
+        receive_display_df['source'] = receive_df['matching_institution'].fillna('')
+        receive_display_df['status'] = receive_df['matching_institution'].apply(
+            lambda x: '✅ Matched' if pd.notna(x) else '❌ Unmatched'
         )
     else:
-        st.info("No receive transfers found")
+        receive_display_df['source'] = ''
+        receive_display_df['status'] = '❓ Unknown'
     
-    # Display summary statistics
-    st.subheader("Summary Statistics")
+    # Rename columns and format timestamp
+    receive_display_df = receive_display_df.rename(columns={
+        'timestamp': 'Date',
+        'asset': 'Asset',
+        'quantity': 'Quantity',
+        'price': 'Price',
+        'subtotal': 'Subtotal',
+        'fees': 'Fees',
+        'cost_basis': 'Cost Basis',
+        'cost_basis_per_unit': 'Cost/Unit',
+        'net_proceeds': 'Net Proceeds',
+        'institution': 'Destination',
+        'source': 'Source',
+        'status': 'Status'
+    })
+    receive_display_df['Date'] = receive_display_df['Date'].dt.strftime('%Y-%m-%d')
     
-    # Calculate summary metrics
-    total_sent = send_transfers['subtotal'].sum() if not send_transfers.empty else 0
-    total_received = receive_transfers['subtotal'].sum() if not receive_transfers.empty else 0
-    total_send_fees = send_transfers['fees'].sum() if not send_transfers.empty else 0
-    total_receive_fees = receive_transfers['fees'].sum() if not receive_transfers.empty else 0
-    total_send_cost_basis = send_transfers['cost_basis'].sum() if not send_transfers.empty else 0
-    total_receive_cost_basis = receive_transfers['cost_basis'].sum() if not receive_transfers.empty else 0
+    # Display receive transfers
+    st.dataframe(receive_display_df.style.format({
+        'Quantity': '{:.4f}',
+        'Price': '${:.2f}',
+        'Subtotal': '${:.2f}',
+        'Fees': '${:.2f}',
+        'Cost Basis': '${:.2f}',
+        'Cost/Unit': '${:.2f}',
+        'Net Proceeds': '${:.2f}'
+    }))
     
-    # Display metrics in columns
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Total Sent", format_currency(total_sent))
-        st.metric("Total Send Fees", format_currency(total_send_fees))
-        st.metric("Total Send Cost Basis", format_currency(total_send_cost_basis))
-    
-    with col2:
-        st.metric("Total Received", format_currency(total_received))
-        st.metric("Total Receive Fees", format_currency(total_receive_fees))
-        st.metric("Total Receive Cost Basis", format_currency(total_receive_cost_basis))
-    
-    # Display net transfer amount
-    net_transfer = total_received - total_sent
-    st.metric("Net Transfer Amount", format_currency(net_transfer))
+    # Add download button for receive transfers
+    if not receive_display_df.empty:
+        csv = receive_display_df.to_csv(index=False)
+        year_suffix = f"_{selected_year}" if selected_year != "All Years" else "_all_years"
+        asset_suffix = f"_{selected_asset}" if selected_asset != "All Assets" else "_all_assets"
+        filename = f"receive_transfers{year_suffix}{asset_suffix}.csv"
+        st.download_button(
+            "Download Receive Transfers CSV",
+            csv,
+            filename,
+            "text/csv",
+            key='download-receive-csv'
+        )
 
 # Load data and display transfers
 try:

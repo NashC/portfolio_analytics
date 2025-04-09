@@ -28,7 +28,7 @@ def load_data():
         st.error(f"Error loading transaction data: {str(e)}")
         return None
 
-def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol: str = "All Assets"):
+def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol: str = "All Assets", include_transfers: bool = True):
     """Display tax report for the specified year"""
     try:
         # Add timestamp to filename
@@ -47,6 +47,10 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
                 st.info(f"No taxable transactions found for {selected_symbol} in {year}.")
                 return
         
+        # Ensure cost_basis column exists in tax_lots
+        if 'cost_basis' not in tax_lots.columns:
+            tax_lots['cost_basis'] = 0.0
+            
         # Display summary metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -60,7 +64,13 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
             
         # Display Sales History section first
         st.subheader("Sales History")
-        sales_df = reporter.show_sell_transactions_with_lots()
+        
+        # Get sales with or without transfers based on checkbox
+        sales_df = reporter.show_sell_transactions_with_lots(include_transfers=include_transfers)
+        
+        # Ensure cost_basis column exists in sales_df
+        if not sales_df.empty and 'cost_basis' not in sales_df.columns:
+            sales_df['cost_basis'] = 0.0
         
         if not sales_df.empty:
             # Filter sales for the selected year and symbol
@@ -71,6 +81,10 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
                 year_sales = year_sales[year_sales['asset'] == selected_symbol]
             
             if not year_sales.empty:
+                # Ensure cost_basis column exists in year_sales
+                if 'cost_basis' not in year_sales.columns:
+                    year_sales['cost_basis'] = 0.0
+                
                 # Convert date back to string format (YYYY-MM-DD)
                 year_sales['date'] = year_sales['date'].dt.strftime("%Y-%m-%d")
                 
@@ -90,6 +104,15 @@ def display_tax_report(reporter: PortfolioReporting, year: int, selected_symbol:
                 
                 # Select only the columns we want to display
                 display_columns = ['date', 'type', 'asset', 'quantity', 'price', 'subtotal', 'fees', 'net_proceeds', 'cost_basis', 'net_profit']
+                
+                # Ensure all required columns exist
+                for col in display_columns:
+                    if col not in year_sales.columns:
+                        if col in ['cost_basis', 'net_proceeds', 'net_profit', 'price', 'subtotal', 'fees']:
+                            year_sales[col] = 0.0
+                        else:
+                            year_sales[col] = ''
+                
                 year_sales = year_sales[display_columns]
                 
                 year_sales.columns = [sales_display_names[col] for col in year_sales.columns]
@@ -233,8 +256,21 @@ def main():
         index=0  # First year (2024) will be selected by default
     )
     
+    # Add option to include transfers in tax report
+    include_transfers = st.checkbox("Include Transfers in Tax Report", value=True, 
+                                  help="When enabled, transfer_out transactions will be included in tax calculations")
+    
+    # Ensure the cost_basis column exists in transactions
+    if 'cost_basis' not in transactions.columns:
+        transactions['cost_basis'] = 0.0
+    
     # Get sales transactions for the selected year
-    sales_df = reporter.show_sell_transactions_with_lots()
+    sales_df = reporter.show_sell_transactions_with_lots(include_transfers=include_transfers)
+    
+    # Ensure the cost_basis column exists in sales_df
+    if not sales_df.empty and 'cost_basis' not in sales_df.columns:
+        sales_df['cost_basis'] = 0.0
+    
     if not sales_df.empty:
         sales_df['date'] = pd.to_datetime(sales_df['date'])
         year_sales = sales_df[sales_df['date'].dt.year == year]
@@ -250,8 +286,8 @@ def main():
         index=0  # "All Assets" will be selected by default
     )
     
-    # Display tax report
-    display_tax_report(reporter, year, selected_symbol)
+    # Display tax report with the selected filters
+    display_tax_report(reporter, year, selected_symbol, include_transfers)
 
 if __name__ == "__main__":
     main() 

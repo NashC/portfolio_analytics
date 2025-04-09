@@ -37,9 +37,34 @@ def main():
     canonical_columns = [
         "transaction_id", "timestamp", "type", "asset", "quantity", "price", "fees",
         "subtotal", "total", "currency", "source_account", "destination_account", 
-        "user_id", "institution", "file_type", "transfer_id", "notes"
+        "institution", "transfer_id", "matching_institution", "matching_date"
     ]
-    normalized_transactions = transactions[[col for col in canonical_columns if col in transactions.columns]]
+    
+    # Ensure transfer_id and matching columns are in the transactions DataFrame
+    if "transfer_id" not in transactions.columns:
+        print("⚠️ Warning: transfer_id column not found in transactions")
+        transactions["transfer_id"] = None
+    if "matching_institution" not in transactions.columns:
+        print("⚠️ Warning: matching_institution column not found in transactions")
+        transactions["matching_institution"] = None
+    if "matching_date" not in transactions.columns:
+        print("⚠️ Warning: matching_date column not found in transactions")
+        transactions["matching_date"] = None
+    
+    normalized_transactions = transactions[canonical_columns].copy()
+    
+    # Debug print transfer matching statistics
+    transfer_out = normalized_transactions[normalized_transactions["type"] == "transfer_out"]
+    transfer_in = normalized_transactions[normalized_transactions["type"] == "transfer_in"]
+    matched_out = transfer_out[transfer_out["transfer_id"].notna()]
+    matched_in = transfer_in[transfer_in["transfer_id"].notna()]
+    
+    print("\nTransfer matching statistics:")
+    print(f"Total transfer out: {len(transfer_out)}")
+    print(f"Total transfer in: {len(transfer_in)}")
+    print(f"Matched transfer out: {len(matched_out)}")
+    print(f"Matched transfer in: {len(matched_in)}")
+    
     normalized_export_path = os.path.join(output_dir, "transactions_normalized.csv")
     normalized_transactions.to_csv(normalized_export_path, index=False)
     print(f"✅ Normalized transactions exported to: {normalized_export_path}")
@@ -69,19 +94,8 @@ def main():
 
     # Step 8: Generate performance reports
     print("\n📊 Generating performance reports...")
-    for period in ["YTD", "1Y", "3Y", "5Y"]:
-        report = reporter.generate_performance_report(period)
-        print(f"\n{period} Performance Summary:")
-        print(f"   - Total Return: {report['metrics']['total_return']:.2f}%")
-        print(f"   - Annualized Return: {report['metrics']['annualized_return']:.2f}%")
-        print(f"   - Volatility: {report['metrics']['volatility']:.2f}%")
-        print(f"   - Sharpe Ratio: {report['metrics']['sharpe_ratio']:.2f}")
-        print(f"   - Max Drawdown: {report['metrics']['max_drawdown']:.2f}%")
-        
-        # Export full report
-        report_path = os.path.join(output_dir, f"performance_report_{period}.csv")
-        pd.DataFrame([report]).to_csv(report_path, index=False)
-        print(f"✅ {period} performance report exported.")
+    reporter.generate_performance_report()
+    print("✅ Performance report exported.")
 
     print("\n🏁 Pipeline complete.")
 
