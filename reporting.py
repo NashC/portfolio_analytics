@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from price_service import price_service
+from price_service import price_service, PriceService
 
 class PortfolioReporting:
     def __init__(self, transactions: pd.DataFrame):
@@ -20,6 +20,59 @@ class PortfolioReporting:
         if 'net_proceeds' not in self.transactions.columns:
             self.transactions['net_proceeds'] = 0.0
         
+        # Initialize a price service instance
+        self.price_service = PriceService()
+    
+    def get_price_data(self, asset_symbol: str) -> pd.DataFrame:
+        """Get historical price data for an asset.
+        
+        Args:
+            asset_symbol: The symbol of the asset to get prices for
+            
+        Returns:
+            DataFrame with price data, containing 'date', 'price', and possibly 'volume' columns
+        """
+        try:
+            # Get the date range from transactions for this asset
+            asset_txs = self.transactions[self.transactions['asset'] == asset_symbol]
+            
+            if asset_txs.empty:
+                return pd.DataFrame(columns=['date', 'price', 'volume'])
+                
+            # Get the min and max dates with some padding
+            min_date = pd.to_datetime(asset_txs['timestamp'].min()) - pd.Timedelta(days=30)
+            max_date = pd.to_datetime(asset_txs['timestamp'].max()) + pd.Timedelta(days=30)
+            
+            # Fetch prices from the price service
+            prices_df = self.price_service.get_multi_asset_prices(
+                [asset_symbol], 
+                min_date,
+                max_date
+            )
+            
+            # If prices were found, format them consistently
+            if not prices_df.empty:
+                # Select just the data for this asset
+                prices_df = prices_df[prices_df['symbol'] == asset_symbol].copy()
+                
+                # Ensure date column is datetime
+                prices_df['date'] = pd.to_datetime(prices_df['date'])
+                
+                # Add a volume column if it doesn't exist
+                if 'volume' not in prices_df.columns:
+                    prices_df['volume'] = 0
+                
+                # Sort by date
+                prices_df = prices_df.sort_values('date')
+                
+                return prices_df
+            else:
+                # Return an empty DataFrame with expected columns
+                return pd.DataFrame(columns=['date', 'price', 'volume'])
+        except Exception as e:
+            print(f"Error getting price data for {asset_symbol}: {str(e)}")
+            return pd.DataFrame(columns=['date', 'price', 'volume'])
+    
     def _calculate_daily_holdings(self, start_date: Optional[datetime] = None,
                                 end_date: Optional[datetime] = None) -> pd.DataFrame:
         """Calculate daily holdings for each asset"""
