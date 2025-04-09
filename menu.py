@@ -5,8 +5,9 @@ def render_navigation():
     menu_items = {
         "Home": "/",
         "Tax Reports": "Tax_Reports",
+        "Asset Analysis": "Asset_Analysis",
+        "Transfers": "Transfers",
         "Performance": "Performance",
-        "Transactions": "Transactions",
         "Settings": "Settings"
     }
     
