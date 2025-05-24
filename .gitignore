@@ -17,8 +17,20 @@ dist/
 # Jupyter/IPython
 .ipynb_checkpoints/
 .ipynb
+notebooks/*.ipynb  # Ignore notebooks except for examples
 
-# Data files
+# Data files - organized structure
+data/databases/*.db
+data/temp/
+data/exports/
+data/historical_price_data/*.csv
+data/transaction_history/*.csv
+!data/historical_price_data/.gitkeep
+!data/transaction_history/.gitkeep
+!data/temp/.gitkeep
+!data/exports/.gitkeep
+
+# Legacy: keep old patterns for compatibility
 *.csv
 data/
 !config/schema_mapping.yaml  # keep this config file tracked
@@ -29,6 +41,7 @@ data/
 *.bak
 *.swp
 *.DS_Store
+:memory:
 
 # Streamlit configuration
 .streamlit/
@@ -41,6 +54,24 @@ data/
 # Testing
 .coverage
 htmlcov/
-pytest_cache/
+.pytest_cache/
 .tox/
 .nox/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Project management temp files
+project/temp/
+docs/temp/
+
+# OS generated files
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db

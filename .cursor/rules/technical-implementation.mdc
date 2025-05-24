@@ -1,0 +1,502 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Technical Implementation Guide
+
+## 🎨 Enhanced Dashboard Architecture
+
+The enhanced dashboard [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py) is the production-ready version with significant improvements over [ui/streamlit_app.py](mdc:ui/streamlit_app.py).
+
+### Component Library Structure
+
+#### Chart Components
+- [ui/components/charts.py](mdc:ui/components/charts.py) - Reusable chart components
+  - All charts use `@st.cache_data(ttl=300)` for 5-minute caching
+  - Consistent theming with `CHART_THEME` configuration
+  - Interactive Plotly visualizations with hover effects
+  - Error handling with `create_empty_chart()` fallback
+
+#### Metrics Components  
+- [ui/components/metrics.py](mdc:ui/components/metrics.py) - KPI and metric displays
+  - `display_metric_card()` for enhanced metric visualization
+  - `display_kpi_grid()` for organized metric layouts
+  - `MetricsCalculator` class for financial calculations
+  - Flexible formatting (currency, percentage, number)
+
+### Performance Optimization Patterns
+
+#### Caching Strategy
+```python
+@st.cache_data(ttl=300, show_spinner=False)  # 5-minute cache for data
+@st.cache_data(ttl=600, show_spinner=False)  # 10-minute cache for computations
+```
+
+#### Data Loading Pattern
+```python
+def load_transactions() -> Optional[pd.DataFrame]:
+    try:
+        transactions = pd.read_csv("output/transactions_normalized.csv", parse_dates=["timestamp"])
+        # Data validation and cleaning
+        return transactions
+    except Exception as e:
+        st.error(f"❌ Error loading data: {str(e)}")
+        return None
+```
+
+## 🔄 Enhanced Data Processing Pipeline (v2.0)
+
+### Core Processing Flow
+1. **Institution Detection** → [app/ingestion/loader.py](mdc:app/ingestion/loader.py)
+2. **Custom Processing** → Institution-specific handlers
+3. **Normalization** → [app/ingestion/normalization.py](mdc:app/ingestion/normalization.py)
+4. **Validation** → Comprehensive data quality checks
+
+### Institution Detection System
+```python
+def get_institution_from_columns(df: pd.DataFrame) -> str:
+    """Automatically detect institution from CSV column patterns."""
+    column_patterns = {
+        'binanceus': ['Operation', 'Change', 'Coin'],
+        'coinbase': ['Transaction Type', 'Asset', 'Quantity Transacted'],
+        'interactive_brokers': ['Transaction Type', 'Symbol', 'Quantity', 'Price'],
+        'gemini': ['Type', 'Symbol', 'Date', 'Time (UTC)']
+    }
+    
+    for institution, required_cols in column_patterns.items():
+        if all(col in df.columns for col in required_cols):
+            return institution
+    
+    return 'unknown'
+```
+
+### Enhanced Transaction Processing
+```python
+def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
+    """Process all transaction files with institution-specific handling."""
+    # 1. Load schema configuration
+    config = load_schema_config(config_path)
+    
+    # 2. Process each file with institution detection
+    for file_name in os.listdir(data_dir):
+        institution, file_type, mapping = match_file_to_mapping(file_name, config)
+        
+        # 3. Apply custom processing for complex institutions
+        if institution == 'interactive_brokers':
+            processed_df = process_interactive_brokers_csv(file_path, mapping)
+        elif institution == 'gemini':
+            # Handle dynamic asset columns and 2024 transaction extraction
+            processed_df = process_gemini_dynamic_assets(file_path, mapping)
+        else:
+            processed_df = ingest_csv(file_path, mapping['mapping'])
+    
+    # 4. Apply enhanced normalization
+    combined_df = normalize_data(combined_df)
+    
+    return combined_df
+```
+
+## 💰 Portfolio Calculations & Financial Analytics
+
+### Core Calculation Modules
+
+#### Portfolio Valuation Engine
+- [app/valuation/portfolio.py](mdc:app/valuation/portfolio.py) - Main portfolio valuation with vectorized operations
+  - `get_portfolio_value(target_date, account_ids=None)` - Get total portfolio value for specific date
+  - `get_value_series(start_date, end_date, account_ids=None)` - Get portfolio value time series
+  - `get_asset_values_series(start_date, end_date, account_ids=None)` - Get asset-level breakdown
+
+#### Returns Calculation Library  
+- [app/analytics/returns.py](mdc:app/analytics/returns.py) - Comprehensive returns analysis
+  - `daily_returns(series)` - Calculate daily percentage returns
+  - `cumulative_returns(series)` - Calculate cumulative returns
+  - `twrr(series, cash_flows=None)` - Time-Weighted Rate of Return
+  - `volatility(returns, annualized=True)` - Volatility calculation
+  - `sharpe_ratio(returns, risk_free_rate=0.02)` - Risk-adjusted returns
+  - `maximum_drawdown(series)` - Maximum drawdown analysis
+
+#### Cost Basis Calculations
+- [app/analytics/portfolio.py](mdc:app/analytics/portfolio.py) - Cost basis and tax calculations
+  - `calculate_cost_basis_fifo(transactions)` - First-In-First-Out method
+  - `calculate_cost_basis_avg(transactions)` - Average cost method
+  - Handles multiple asset types and transaction types
+
+## 🔧 Enhanced Normalization System (v2.0)
+
+### Transaction Type Mapping (150+ Types)
+```python
+INSTITUTION_MAPPINGS = {
+    'binanceus': {
+        'Buy': 'buy', 'Sell': 'sell', 'Deposit': 'transfer_in',
+        'Withdraw': 'transfer_out', 'Staking Rewards': 'staking_reward',
+        'Commission History': 'fee', 'Crypto Deposit': 'transfer_in',
+        'Crypto Withdrawal': 'transfer_out', 'Fiat Deposit': 'deposit',
+        'Fiat Withdraw': 'withdrawal', 'POS savings interest': 'interest',
+        'Launchpool Interest': 'staking_reward', 'Commission Fee Shared With You': 'rebate',
+        'Referral Kickback': 'rebate', 'Card Cashback': 'cashback'
+    },
+    'coinbase': {
+        'Buy': 'buy', 'Sell': 'sell', 'Send': 'transfer_out', 'Receive': 'transfer_in',
+        'Staking Income': 'staking_reward', 'Coinbase Earn': 'staking_reward',
+        'Advanced Trade Buy': 'buy', 'Advanced Trade Sell': 'sell',
+        'Rewards Income': 'staking_reward', 'Learning Reward': 'reward',
+        'Inflation Reward': 'staking_reward', 'Trade': 'trade',
+        'Convert': 'convert', 'Product Conversion': 'convert'
+    },
+    'interactive_brokers': {
+        'Buy': 'buy', 'Sell': 'sell', 'Deposit': 'deposit', 'Withdrawal': 'withdrawal',
+        'Dividend': 'dividend', 'Credit Interest': 'interest', 'Debit Interest': 'interest',
+        'Foreign Tax Withholding': 'tax', 'Cash Transfer': 'transfer',
+        'Electronic Fund Transfer': 'transfer', 'Other Fee': 'fee'
+    },
+    'gemini': {
+        'Buy': 'buy', 'Sell': 'sell', 'Deposit': 'transfer_in', 'Withdrawal': 'transfer_out',
+        'Credit': 'staking_reward', 'Debit': 'fee', 'Transfer': 'transfer',
+        'Interest Credit': 'staking_reward', 'Administrative Credit': 'adjustment',
+        'Administrative Debit': 'adjustment', 'Custody Transfer': 'transfer'
+    }
+}
+```
+
+### Smart Type Inference
+```python
+def infer_transaction_type(row: pd.Series) -> str:
+    """Infer transaction type from quantity/price patterns when mapping fails."""
+    quantity = float(row.get('quantity', 0))
+    price = float(row.get('price', 0))
+    asset = str(row.get('asset', '')).upper()
+    
+    # Stablecoin logic
+    if asset in ['USDC', 'USDT', 'DAI', 'BUSD', 'GUSD']:
+        return 'deposit' if quantity > 0 else 'withdrawal'
+    
+    # Crypto/Stock logic
+    if quantity > 0 and price > 0:
+        return 'buy'
+    elif quantity < 0 and price > 0:
+        return 'sell'
+    elif quantity > 0 and price == 0:
+        return 'transfer_in'
+    elif quantity < 0 and price == 0:
+        return 'transfer_out'
+    
+    return 'unknown'
+```
+
+### Interactive Brokers Custom Processing
+```python
+def process_interactive_brokers_csv(file_path: str, mapping: dict) -> pd.DataFrame:
+    """Custom processing for Interactive Brokers complex transaction format."""
+    df = pd.read_csv(file_path)
+    processed_rows = []
+    
+    for _, row in df.iterrows():
+        transaction_type = row['Transaction Type']
+        
+        # Handle stock/ETF transactions
+        if transaction_type in ['Buy', 'Sell'] and row['Symbol']:
+            processed_row = {
+                'timestamp': pd.to_datetime(row['Date']),
+                'type': transaction_type,
+                'asset': row['Symbol'],
+                'quantity': abs(row['Quantity']) if transaction_type == 'Buy' else -abs(row['Quantity']),
+                'price': abs(row['Price']),
+                'fees': abs(row['Commission']),
+                'institution': 'interactive_brokers'
+            }
+            processed_rows.append(processed_row)
+        
+        # Handle cash transactions (deposits, withdrawals, dividends, interest)
+        elif transaction_type in ['Deposit', 'Withdrawal', 'Dividend', 'Credit Interest']:
+            processed_row = {
+                'timestamp': pd.to_datetime(row['Date']),
+                'type': transaction_type,
+                'asset': 'USD',
+                'quantity': row['Net Amount'],
+                'price': 1.0,
+                'fees': 0,
+                'institution': 'interactive_brokers'
+            }
+            processed_rows.append(processed_row)
+    
+    return pd.DataFrame(processed_rows)
+```
+
+## ⚠️ Critical Data Type Handling
+
+### Float Conversion Pattern (CRITICAL)
+**Always convert Decimal to float for pandas operations:**
+```python
+# ✅ Correct pattern
+df['value'] = df['quantity'].astype(float) * df['price'].astype(float)
+daily_values = daily_values.astype(float)
+
+# ❌ Avoid - causes pandas errors
+df['value'] = df['quantity'] * df['price']  # If columns contain Decimal objects
+```
+
+### Stablecoin Price Handling
+```python
+# Handle missing price data for stablecoins
+price = row.price if row.price is not None else (
+    1.0 if row.symbol.upper() in ['USDC', 'USDT', 'DAI', 'BUSD', 'GUSD'] else 0.0
+)
+```
+
+### Enhanced Data Validation
+```python
+def validate_normalized_data(df: pd.DataFrame) -> Dict[str, Any]:
+    """Comprehensive validation with detailed reporting."""
+    validation_results = {
+        'total_rows': len(df),
+        'valid_timestamps': df['timestamp'].notna().sum(),
+        'valid_types': df['type'].isin(CANONICAL_TYPES).sum(),
+        'valid_quantities': df['quantity'].notna().sum(),
+        'unknown_types': (df['type'] == 'unknown').sum(),
+        'missing_prices': df['price'].isna().sum(),
+        'zero_quantities': (df['quantity'] == 0).sum(),
+        'institutions': df['institution'].value_counts().to_dict(),
+        'asset_coverage': df['asset'].nunique(),
+        'date_range': (df['timestamp'].min(), df['timestamp'].max())
+    }
+    return validation_results
+```
+
+## 🚀 Performance Optimization
+
+### Vectorized Operations
+Use pandas vectorized operations for performance:
+```python
+# ✅ Vectorized (fast)
+portfolio_values = positions.groupby('date').apply(
+    lambda x: (x['quantity'].astype(float) * x['price'].astype(float)).sum()
+)
+
+# ❌ Iterative (slow)
+for date in dates:
+    value = 0
+    for _, row in positions[positions['date'] == date].iterrows():
+        value += row['quantity'] * row['price']
+```
+
+### Enhanced Caching Strategy
+```python
+@st.cache_data(ttl=600, show_spinner=False)  # 10-minute cache for heavy computations
+def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
+    # Expensive calculations here
+    return metrics
+
+@st.cache_data(ttl=300, show_spinner=False)  # 5-minute cache for data loading
+def load_normalized_transactions() -> pd.DataFrame:
+    return pd.read_csv("output/transactions_normalized.csv", parse_dates=["timestamp"])
+```
+
+## 🔧 Position Tracking Engine
+
+### Daily Position Updates
+- [app/ingestion/update_positions.py](mdc:app/ingestion/update_positions.py) - Position tracking
+  - `PositionEngine` class for managing daily positions
+  - `update_positions_from_transactions()` - Convert transactions to positions
+  - Forward-filling logic for position continuity
+  - Handles buys, sells, transfers, staking rewards
+
+### Transaction Type Mapping
+```python
+POSITION_EFFECTS = {
+    'buy': 'increase',
+    'transfer_in': 'increase', 
+    'staking_reward': 'increase',
+    'dividend': 'increase',
+    'interest': 'increase',
+    'sell': 'decrease',
+    'transfer_out': 'decrease',
+    'withdrawal': 'decrease'
+}
+```
+
+## 🌐 API Endpoints
+
+### REST API Structure
+- [app/api/__init__.py](mdc:app/api/__init__.py) - FastAPI endpoints
+  - `GET /health` - Health check
+  - `GET /portfolio/value` - Portfolio value for specific date
+  - `GET /portfolio/value-series` - Portfolio value time series  
+  - `GET /portfolio/returns` - Comprehensive returns analysis
+
+### Response Format
+```python
+{
+    "target_date": "2024-01-01",
+    "portfolio_value": 125000.50,
+    "account_ids": [1, 2],
+    "currency": "USD"
+}
+```
+
+### API Usage Examples
+```python
+# Python client
+import requests
+response = requests.get("http://localhost:8000/portfolio/value", params={
+    "target_date": "2024-01-01"
+})
+data = response.json()
+
+# FastAPI test client
+from fastapi.testclient import TestClient
+from app.api import app
+client = TestClient(app)
+response = client.get("/portfolio/value?target_date=2024-01-01")
+```
+
+## 📊 Financial Metrics Calculations
+
+### Risk Metrics
+- **Sharpe Ratio**: `(returns.mean() * 252 - risk_free_rate) / (returns.std() * sqrt(252))`
+- **Maximum Drawdown**: `min((prices / rolling_max - 1) * 100)`
+- **Volatility**: `returns.std() * sqrt(252) * 100` (annualized)
+
+### Performance Metrics  
+- **Total Return**: `(final_value / initial_value - 1) * 100`
+- **Annualized Return**: `((final_value / initial_value) ^ (252 / days) - 1) * 100`
+- **TWRR**: Time-weighted return accounting for cash flows
+
+## 🎨 UI Design Patterns
+
+### Custom CSS Styling
+- Professional gradients and modern color schemes
+- Responsive design for all device sizes
+- Hover effects and smooth transitions
+- Performance indicators and status displays
+
+### Navigation Structure
+- Radio button navigation with emoji icons
+- Sidebar performance monitoring
+- Quick stats display
+- Contextual help and tooltips
+
+## 📋 Data Requirements
+
+### Required Columns
+The dashboard expects these columns in `output/transactions_normalized.csv`:
+- `timestamp` (datetime)
+- `type` (string)
+- `asset` (string) 
+- `quantity` (float) - **Critical**: Must exist or be created from `amount`
+- `price` (float)
+- `fees` (float, optional)
+- `institution` (string)
+
+### Enhanced Data Validation
+Always validate data structure before processing:
+```python
+required_columns = ['timestamp', 'type', 'asset', 'quantity', 'price', 'institution']
+missing_columns = [col for col in required_columns if col not in df.columns]
+if missing_columns:
+    st.error(f"❌ Missing required columns: {missing_columns}")
+    return None
+
+# Validate canonical transaction types
+invalid_types = df[~df['type'].isin(CANONICAL_TYPES)]['type'].unique()
+if len(invalid_types) > 0:
+    st.warning(f"⚠️ Unknown transaction types found: {invalid_types}")
+```
+
+## 🚀 Launch Commands
+
+### Complete Pipeline Processing
+```bash
+# Process all transaction files and generate normalized data
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+```
+
+### Development
+```bash
+# From project root with PYTHONPATH
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+```
+
+### Production
+```bash
+streamlit run ui/streamlit_app_v2.py --server.port 8501 --server.address 0.0.0.0
+```
+
+### API Server
+```bash
+# Development
+uvicorn app.api:app --reload --port 8000
+
+# Production
+uvicorn app.api:app --host 0.0.0.0 --port 8000
+```
+
+## 📈 Performance Monitoring
+
+The dashboard includes real-time performance monitoring via `PerformanceMonitor` class:
+- Load time tracking
+- Memory usage monitoring  
+- Operation timing
+- Performance ratings (🟢 Excellent, 🟡 Good, 🔴 Slow)
+
+## 🧪 Testing & Benchmarking
+
+### Comprehensive Test Suite
+- [tests/test_normalization_comprehensive.py](mdc:tests/test_normalization_comprehensive.py) - 32 tests, 100% pass rate
+- [scripts/test_normalization.py](mdc:scripts/test_normalization.py) - Quick validation runner
+- [scripts/simple_benchmark.py](mdc:scripts/simple_benchmark.py) - Performance benchmarking
+- [scripts/demo_dashboard.py](mdc:scripts/demo_dashboard.py) - Feature demonstration
+
+### Performance Targets
+- **Data Processing**: <200ms for 10,000+ transactions
+- **Dashboard Load**: <500ms initial load time
+- **Normalization**: <2% unknown transaction rate
+- **Test Coverage**: 93.4% (85/91 tests passing)
+
+## ⚠️ Error Handling Patterns
+
+### Enhanced Graceful Degradation
+```python
+try:
+    # Detect institution and apply custom processing
+    institution = get_institution_from_columns(df)
+    if institution == 'interactive_brokers':
+        processed_df = process_interactive_brokers_csv(file_path, mapping)
+    else:
+        processed_df = ingest_csv(file_path, mapping)
+    
+    # Apply normalization with validation
+    normalized_df = normalize_data(processed_df)
+    validation_results = validate_normalized_data(normalized_df)
+    
+    if validation_results['unknown_types'] > 0:
+        logger.warning(f"Found {validation_results['unknown_types']} unknown transaction types")
+    
+    return normalized_df
+    
+except Exception as e:
+    logger.error(f"Processing failed: {e}")
+    return pd.DataFrame()  # Return empty DataFrame for graceful degradation
+```
+
+### Dashboard Error Handling
+```python
+try:
+    # Load and validate normalized data
+    transactions = load_normalized_transactions()
+    if transactions is None or transactions.empty:
+        st.error("❌ No transaction data available. Please run the data pipeline first.")
+        st.code("PYTHONPATH=$(pwd) python -c \"from app.ingestion.loader import process_transactions; ...\"")
+        return
+    
+    # Validate required columns
+    required_columns = ['timestamp', 'type', 'asset', 'quantity', 'price', 'institution']
+    missing_columns = [col for col in required_columns if col not in transactions.columns]
+    if missing_columns:
+        st.error(f"❌ Missing required columns: {missing_columns}")
+        return
+        
+except Exception as e:
+    logger.error(f"Dashboard error: {e}")
+    st.error(f"❌ Unexpected error: {str(e)}")
+```
