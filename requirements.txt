@@ -8,4 +8,9 @@ pycoingecko>=3.1.0
 plotly>=5.18.0
 sqlalchemy>=2.0.0
 python-dateutil>=2.8.2
+fastapi>=0.104.0
+uvicorn>=0.24.0
 # sqlite3 is included in Python standard library
+pytest==8.0.0
+pytest-cov==4.1.0
+pytest-mock==3.12.0

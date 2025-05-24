@@ -1,0 +1,243 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Development Workflow & Testing
+
+## 🧪 Test Suite Overview
+
+**Current Status**: 85/91 tests passing (93.4% pass rate) ✅
+
+### Test Structure
+- [tests/test_cost_basis.py](mdc:tests/test_cost_basis.py) - Cost basis calculation tests
+- [tests/test_ingestion.py](mdc:tests/test_ingestion.py) - Data ingestion tests  
+- [tests/test_migration.py](mdc:tests/test_migration.py) - Database migration tests
+- [tests/test_normalization.py](mdc:tests/test_normalization.py) - Transaction normalization tests
+- [tests/test_portfolio.py](mdc:tests/test_portfolio.py) - Portfolio analytics tests
+- [tests/test_price_service.py](mdc:tests/test_price_service.py) - Price service tests (6 skipped)
+- [tests/test_transfers.py](mdc:tests/test_transfers.py) - Transfer reconciliation tests
+- [tests/test_api_endpoints.py](mdc:tests/test_api_endpoints.py) - API endpoint tests ✅
+- [tests/test_returns_library.py](mdc:tests/test_returns_library.py) - Returns calculation tests ✅
+- [tests/test_position_engine.py](mdc:tests/test_position_engine.py) - Position tracking tests ✅
+
+### Portfolio Testing Scripts
+- [test_portfolio_simple.py](mdc:test_portfolio_simple.py) - Simple portfolio returns test with synthetic data
+- [test_portfolio_returns_with_real_data.py](mdc:test_portfolio_returns_with_real_data.py) - Comprehensive test with real data
+
+## 🏃‍♂️ Running Tests
+
+### Full Test Suite
+```bash
+python -m pytest tests/ -v
+```
+
+### Specific Test Module
+```bash
+python -m pytest tests/test_portfolio.py -v
+```
+
+### With Coverage
+```bash
+python -m pytest tests/ --cov=app --cov-report=html
+```
+
+### Portfolio Returns Testing
+```bash
+# Simple test with synthetic data
+python test_portfolio_simple.py
+
+# Comprehensive test with real data (requires migration.py first)
+python test_portfolio_returns_with_real_data.py
+```
+
+## 🔧 Development Workflow
+
+### Code Quality Standards
+1. **Type Hints**: Use type hints throughout the codebase ✅
+2. **Error Handling**: Implement comprehensive error handling ✅
+3. **Logging**: Add structured logging for debugging
+4. **Documentation**: Maintain clear docstrings and comments ✅
+5. **Data Types**: Ensure proper float/Decimal conversion for financial calculations ✅
+
+### Pre-commit Checklist
+- [ ] All tests pass (aim for 85%+ pass rate)
+- [ ] Type hints added for new functions
+- [ ] Error handling implemented
+- [ ] Documentation updated
+- [ ] Data types properly handled (float for calculations)
+- [ ] Database sessions properly managed
+
+## 🧪 Testing Patterns
+
+### Database Testing
+```python
+@pytest.fixture
+def test_db():
+    """Create a test database with SQLite in-memory."""
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    return Session()
+```
+
+### Mock-based Testing
+```python
+@pytest.fixture
+def mock_price_service():
+    """Create a mock price service for testing."""
+    mock_service = Mock()
+    mock_service.get_price.return_value = 50000.0  # Mock BTC price
+    return mock_service
+```
+
+### Data Fixtures
+Use realistic test data that matches production schemas:
+```python
+@pytest.fixture
+def sample_transactions():
+    return pd.DataFrame({
+        'timestamp': pd.to_datetime(['2024-01-01', '2024-01-02']),
+        'type': ['buy', 'sell'],
+        'asset': ['BTC', 'BTC'],
+        'quantity': [1.0, 0.5],
+        'price': [50000.0, 51000.0]
+    })
+```
+
+## 📊 Performance Testing
+
+### Benchmarking Scripts
+- [scripts/simple_benchmark.py](mdc:scripts/simple_benchmark.py) - Performance benchmarking
+- [scripts/benchmark_dashboard.py](mdc:scripts/benchmark_dashboard.py) - Dashboard performance testing
+- [scripts/demo_dashboard.py](mdc:scripts/demo_dashboard.py) - Feature demonstration
+
+### Performance Targets
+- **Data Loading**: <50ms for 3,000+ transactions
+- **Portfolio Calculations**: <100ms for full analysis
+- **Memory Usage**: <5MB overhead for typical datasets
+- **Dashboard Load**: <500ms initial load time
+
+## 🐛 Common Issues & Solutions
+
+### Data Type Issues
+**Problem**: Decimal objects causing pandas operations to fail
+**Solution**: Explicit conversion to float in calculations
+```python
+df['value'] = df['quantity'].astype(float) * df['price'].astype(float)
+```
+
+### Missing Price Data
+**Problem**: Assets without price data causing calculation errors
+**Solution**: Implement graceful fallbacks for stablecoins and missing data
+```python
+price = row.price if row.price is not None else (
+    1.0 if row.symbol.upper() in ['USDC', 'USDT', 'DAI'] else 0.0
+)
+```
+
+### Database Connection Issues
+**Problem**: Database sessions not properly managed
+**Solution**: Use context managers and proper session cleanup
+```python
+with next(get_db()) as db:
+    # Database operations
+    pass  # Session automatically closed
+```
+
+### Missing Amount Column
+**Problem**: Dashboard expects `amount` column but CSV has `quantity`
+**Solution**: 
+```python
+# Add missing amount column
+if 'amount' not in df.columns and 'quantity' in df.columns:
+    df['amount'] = df['quantity']
+```
+
+## 🔄 Continuous Integration
+
+### GitHub Actions Workflow
+- Automated testing on push/PR
+- Code quality checks (linting, type checking)
+- Performance regression testing
+- Documentation generation
+
+### Test Configuration
+- [pytest.ini](mdc:pytest.ini) - Pytest configuration
+- Test coverage reporting enabled
+- SQLite in-memory databases for testing
+
+## 🐛 Debugging Patterns
+
+### Logging Setup
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+# In functions
+logger.info(f"Processing {len(transactions)} transactions")
+logger.error(f"Calculation failed: {e}")
+```
+
+### Error Context
+```python
+try:
+    result = complex_calculation(data)
+except Exception as e:
+    logger.error(f"Error in {function_name}: {e}", exc_info=True)
+    # Provide fallback or re-raise with context
+    raise ValueError(f"Calculation failed: {str(e)}") from e
+```
+
+## 📈 Performance Monitoring
+
+### Key Metrics to Track
+- Test execution time
+- Memory usage during tests
+- Database query performance
+- API response times
+- Dashboard load times
+
+### Monitoring Tools
+- Built-in performance monitoring in [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py)
+- Benchmark scripts for regression testing
+- Memory profiling for optimization
+
+## 🚀 Development Commands
+
+### Environment Setup
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Database Operations
+```bash
+# Run migration
+python migration.py
+
+# Reset database
+rm portfolio.db && python migration.py
+```
+
+### Dashboard Development
+```bash
+# Launch enhanced dashboard
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+
+# Clear Streamlit cache
+streamlit cache clear
+```
+
+### API Development
+```bash
+# Start API server
+uvicorn app.api:app --reload --port 8000
+
+# Test API endpoints
+curl "http://localhost:8000/health"
+curl "http://localhost:8000/portfolio/value?target_date=2024-01-01"
+```

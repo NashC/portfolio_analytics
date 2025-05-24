@@ -1,13 +1,21 @@
 binanceus:
-  timestamp: "Time"
-  type: "Category"
-  asset: "Primary Asset"
-  quantity: "Realized Amount For Primary Asset"
-  price: "Realized Amount for Primary Asset in USD"
-  fees: "Realized Amount for Fee Asset in USD"
-  currency: "Quote Asset"
-  source_account: "Withdraw Method"
-  destination_account: "Payment Method"
+  file_pattern: "binanceus_transaction_history.csv"
+  mapping:
+    timestamp: "Time"
+    type: "Operation"
+    operation: "Operation"
+    asset: "Primary Asset"
+    quantity: "Realized Amount For Primary Asset"
+    price: "Realized Amount for Primary Asset in USD"
+    fees: "Realized Amount for Fee Asset in USD"
+    currency: "Quote Asset"
+    source_account: "Withdraw Method"
+    destination_account: "Payment Method"
+  transaction_type_map:
+    "Crypto Withdrawal": "transfer_out"
+    "Crypto Deposit": "transfer_in"
+    "Buy": "buy"
+    "Sell": "sell"
 
 coinbase:
   file_pattern: "coinbase_transaction_history.csv"
@@ -23,6 +31,25 @@ coinbase:
     currency: "Price Currency"
     source_account: ""
     destination_account: ""
+
+interactive_brokers:
+  file_pattern: "interactive_brokers_transaction_history.csv"
+  mapping:
+    timestamp: "Date"
+    type: "Transaction Type"
+    asset: "Symbol"
+    quantity: "Quantity"
+    price: "Price"
+    gross_amount: "Gross Amount"
+    commission: "Commission"
+    net_amount: "Net Amount"
+    account: "Account"
+    description: "Description"
+    currency: "USD"
+    source_account: ""
+    destination_account: ""
+  constants:
+    institution: "interactive_brokers"
 
 gemini:
   staking:

@@ -1,0 +1,357 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Common Workflows & Commands
+
+## 🚀 Essential Commands
+
+### Complete Data Pipeline
+```bash
+# Process all transaction files and generate normalized data
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+```
+
+### Launch Enhanced Dashboard
+```bash
+# Production-ready dashboard (recommended)
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+
+# Legacy dashboard
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app.py --server.port 8501
+```
+
+### Testing & Validation
+```bash
+# Full test suite (85/91 tests passing)
+python -m pytest tests/ -v
+
+# Normalization tests only (32/32 tests passing)
+python -m pytest tests/test_normalization_comprehensive.py -v
+
+# Quick normalization validation with real data
+python scripts/test_normalization.py
+
+# Portfolio-specific tests
+python test_portfolio_simple.py
+python test_portfolio_returns_with_real_data.py
+```
+
+### Performance Benchmarking
+```bash
+# Simple performance benchmark
+python scripts/simple_benchmark.py
+
+# Dashboard feature demonstration
+python scripts/demo_dashboard.py
+```
+
+## 📁 File Organization
+
+### Input Data Structure
+```
+data/
+├── transaction_history/           # Multi-institution transaction files
+│   ├── binanceus_transaction_history.csv
+│   ├── coinbase_transaction_history.csv
+│   ├── gemini_transaction_history.csv
+│   ├── gemini_staking_transaction_history.csv
+│   └── interactive_brokers_*.csv
+├── historical_price_data/         # Historical price data
+│   └── historical_price_data_daily_[source]_[symbol]USD.csv
+└── databases/                     # Database files
+    └── prices.db
+```
+
+### Output Data Structure
+```
+output/
+├── transactions_normalized.csv    # Unified transaction ledger (MAIN OUTPUT)
+├── portfolio_timeseries.csv      # Portfolio value over time
+├── cost_basis_fifo.csv           # FIFO cost basis calculations
+├── cost_basis_avg.csv            # Average cost basis calculations
+└── performance_report.csv        # Portfolio performance metrics
+```
+
+### Configuration Files
+```
+config/
+├── schema_mapping.yaml           # Institution-specific column mappings
+└── dashboard_config.json         # Dashboard configuration
+```
+
+## 🔄 Common Workflows
+
+### 1. Initial Setup & Data Processing
+```bash
+# Step 1: Ensure virtual environment is activated
+source .venv/bin/activate
+
+# Step 2: Install dependencies (if needed)
+pip install -r requirements.txt
+
+# Step 3: Place transaction CSV files in data/transaction_history/
+
+# Step 4: Run complete data pipeline
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+
+# Step 5: Launch dashboard
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+```
+
+### 2. Adding New Institution Data
+```bash
+# Step 1: Add new CSV file to data/transaction_history/
+# Step 2: Update config/schema_mapping.yaml if needed
+# Step 3: Re-run data pipeline
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+
+# Step 4: Validate normalization
+python scripts/test_normalization.py
+
+# Step 5: Refresh dashboard (clear cache if needed)
+# In dashboard: Settings > Clear Cache
+```
+
+### 3. Development & Testing Workflow
+```bash
+# Step 1: Make code changes
+# Step 2: Run relevant tests
+python -m pytest tests/test_normalization_comprehensive.py -v
+
+# Step 3: Test with real data
+python scripts/test_normalization.py
+
+# Step 4: Run full test suite
+python -m pytest tests/ -v
+
+# Step 5: Performance benchmark
+python scripts/simple_benchmark.py
+
+# Step 6: Test dashboard
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+```
+
+### 4. Database Migration Workflow
+```bash
+# Step 1: Ensure normalized data exists
+ls -la output/transactions_normalized.csv
+
+# Step 2: Run database migration
+python migration.py
+
+# Step 3: Verify database creation
+ls -la portfolio.db
+
+# Step 4: Test portfolio calculations
+python test_portfolio_returns_with_real_data.py
+```
+
+## 🧪 Testing Workflows
+
+### Normalization Testing
+```bash
+# Quick validation
+python scripts/test_normalization.py
+
+# Comprehensive test suite
+python -m pytest tests/test_normalization_comprehensive.py -v
+
+# Test specific institution
+python -c "from tests.test_normalization_comprehensive import *; test_institution_detection_interactive_brokers()"
+```
+
+### Portfolio Testing
+```bash
+# Simple synthetic data test
+python test_portfolio_simple.py
+
+# Real data comprehensive test
+python test_portfolio_returns_with_real_data.py
+
+# API endpoint tests
+python -m pytest tests/test_api_endpoints.py -v
+
+# Returns calculation tests
+python -m pytest tests/test_returns_library.py -v
+```
+
+### Performance Testing
+```bash
+# Data loading benchmark
+python scripts/simple_benchmark.py
+
+# Dashboard performance test
+python scripts/benchmark_dashboard.py
+
+# Memory usage profiling
+python -c "import psutil; print(f'Memory usage: {psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB')"
+```
+
+## 🔧 Troubleshooting Commands
+
+### Common Issues & Solutions
+
+#### Missing Amount Column Error
+```bash
+# Check if quantity column exists instead
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print('Columns:', df.columns.tolist())"
+
+# Fix by re-running pipeline (handles column mapping automatically)
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False)"
+```
+
+#### Dashboard Cache Issues
+```bash
+# Clear Streamlit cache
+streamlit cache clear
+
+# Or restart dashboard with cache cleared
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502 --server.runOnSave true
+```
+
+#### Import Path Issues
+```bash
+# Always use PYTHONPATH for proper module imports
+PYTHONPATH=$(pwd) python your_script.py
+
+# Or add to Python path in script
+import sys
+sys.path.append('/path/to/portfolio_analytics')
+```
+
+#### Data Validation Errors
+```bash
+# Check data quality
+python -c "from app.ingestion.normalization import validate_normalized_data; import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(validate_normalized_data(df))"
+
+# Check for unknown transaction types
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); unknown = df[df['type'] == 'unknown']; print(f'Unknown types: {len(unknown)}'); print(unknown[['timestamp', 'type', 'asset', 'institution']].head())"
+```
+
+## 📊 Data Quality Checks
+
+### Validation Commands
+```bash
+# Check transaction count by institution
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df['institution'].value_counts())"
+
+# Check transaction types
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df['type'].value_counts())"
+
+# Check date range
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); df['timestamp'] = pd.to_datetime(df['timestamp']); print(f'Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}')"
+
+# Check for missing data
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print('Missing data:'); print(df.isnull().sum())"
+```
+
+### Asset Coverage Check
+```bash
+# Check unique assets
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Total assets: {df[\"asset\"].nunique()}'); print('Assets:', sorted(df['asset'].unique()))"
+
+# Check assets by institution
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df.groupby('institution')['asset'].nunique())"
+```
+
+## 🚀 API Server Commands
+
+### Development Server
+```bash
+# Start FastAPI development server
+uvicorn app.api:app --reload --port 8000
+
+# Test API endpoints
+curl "http://localhost:8000/health"
+curl "http://localhost:8000/portfolio/value?target_date=2024-01-01"
+```
+
+### Production Server
+```bash
+# Start production server
+uvicorn app.api:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Test with authentication (if implemented)
+curl -H "Authorization: Bearer your_token" "http://localhost:8000/portfolio/value"
+```
+
+## 📈 Performance Monitoring
+
+### System Resource Monitoring
+```bash
+# Check memory usage
+python -c "import psutil; print(f'Memory: {psutil.virtual_memory().percent}%')"
+
+# Check disk usage
+df -h
+
+# Monitor Python process
+top -p $(pgrep -f streamlit)
+```
+
+### Application Performance
+```bash
+# Time data loading
+time python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Loaded {len(df)} transactions')"
+
+# Time normalization process
+time python scripts/test_normalization.py
+
+# Time dashboard startup
+time PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502 &
+```
+
+## 🔄 Backup & Recovery
+
+### Data Backup
+```bash
+# Backup normalized data
+cp output/transactions_normalized.csv output/transactions_normalized_backup_$(date +%Y%m%d).csv
+
+# Backup database
+cp portfolio.db portfolio_backup_$(date +%Y%m%d).db
+
+# Backup configuration
+tar -czf config_backup_$(date +%Y%m%d).tar.gz config/
+```
+
+### Recovery Commands
+```bash
+# Restore from backup
+cp output/transactions_normalized_backup_YYYYMMDD.csv output/transactions_normalized.csv
+
+# Regenerate from source data
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False)"
+
+# Rebuild database
+rm portfolio.db
+python migration.py
+```
+
+## 📚 Documentation Commands
+
+### Generate Documentation
+```bash
+# View project structure
+tree -I '__pycache__|*.pyc|.git|.venv' -L 3
+
+# Check test coverage
+python -m pytest tests/ --cov=app --cov-report=html
+
+# Generate API documentation
+python -c "from app.api import app; import json; print(json.dumps(app.openapi(), indent=2))" > api_docs.json
+```
+
+### Quick Reference
+```bash
+# Show all available commands
+grep -r "def " app/ --include="*.py" | grep -E "(def [a-z_]+)" | head -20
+
+# Show configuration options
+cat config/schema_mapping.yaml
+
+# Show recent changes
+git log --oneline -10
+```

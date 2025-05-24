@@ -1,0 +1,132 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Portfolio Analytics SaaS – Product Requirements Document (v1.1)
+
+> **Status:** Working draft – last updated 23 May 2025
+
+## 1  Vision & Objectives
+
+**Vision.** Give investors a single source of truth for performance, cost‑basis, and real‑time insights across every asset class and exchange they touch.
+
+**Primary Objectives (v1.0)**
+
+1. **Accuracy first** – deterministic valuations & FIFO/LIFO tax lots within ±0.01 USD of authoritative sources.
+2. **Any asset, any venue** – crypto, equities, bonds, derivatives; CSV import day 1, API sync day 30.
+3. **Reliability** – 99.5 % uptime, automated regression tests & backfills.
+4. **Shareable, defensible reports** – exportable PDFs/CSVs accepted by accountants, auditors, and regulators.
+
+---
+
+## 2  Personas & Jobs‑to‑Be‑Done (JTBD)
+
+| Persona                           | JTBD                                                                                    | Today’s Pain                                                                       | Implication                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Retail Crypto Investor**        | *“Track my crypto across CEXs & wallets so I know my P\&L and taxes.”*                  | Dozens of CSV formats, no easy FIFO/average cost calc.                             | Must ingest messy CSVs and dedupe on-chain addresses.                             |
+| **Professional Investor** *(NEW)* | *“Aggregate all my assets so I can run portfolio‑level analytics and exposure checks.”* | Assets spread across brokerages, prime brokers, & exchanges → no single dashboard. | Needs multi‑asset ingestion, asset‑class tagging, position netting across venues. |
+
+---
+
+## 3  Problem Statements
+
+1. Existing DIY spreadsheets break once investors hold >3 asset classes.
+2. Current crypto apps ignore stocks/derivatives; brokerage tools ignore crypto.
+3. Professionals need audit‑grade data lineage; hobbyist tools fail this bar.
+
+---
+
+## 4  Solution Overview & Principles
+
+1. **Modular ingestion pipeline** handles any file format via per‑exchange adapters.
+2. **Canonical transaction schema** normalises trades, transfers, dividends, option exercises.
+3. **Pluggable valuation engine** fetches end‑of‑day prices (cached), computes cost‑basis + MTM.
+4. **Composable UI** (start: Streamlit; later: move to React/Next.js or FastAPI+HTMX) allows rapid iteration now without boxing us in.
+
+---
+
+## 5  Feature Roadmap
+
+| Phase                                                        | Key Deliverables                                                                                            | Notes |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ----- |
+| **v0.1 (Phase 0)**                                           | • Crypto + stablecoin ingestion                                                                             |       |
+| • SQLite persistence                                         |                                                                                                             |       |
+| • Streamlit dashboards                                       |                                                                                                             |       |
+| • Basic cost‑basis & P\&L                                    | *Current work.*                                                                                             |       |
+| **v0.2 (Phase 1)**                                           | • **Stocks, bonds, options, futures** via CSV                                                               |       |
+| • AssetType enum & schema migration                          |                                                                                                             |       |
+| • Professional‑investor dashboards                           | DB still SQLite; asset model abstracted for Postgres.                                                       |       |
+| **v0.3 (Phase 2)**                                           | • Postgres backend                                                                                          |       |
+| • API connectors (Alpaca, Interactive Brokers, Coinbase Pro) |                                                                                                             |       |
+| • Multi‑currency support                                     | Requires background workers & retry queues.                                                                 |       |
+| **v1.0 (Phase 3)**                                           | • Replace Streamlit with prod‑grade web UI (candidate stacks: **Next.js + FastAPI** or **Django 3.3 HTMX**) |       |
+| • Team workspaces & report sharing                           |                                                                                                             |       |
+| • Self‑service plan & billing                                | Public beta.                                                                                                |       |
+
+---
+
+## 6  Technical Architecture
+
+### 6.1 Data Stores
+
+| Layer     | Phase 0                      | Phase 1‑2 Plan                                                         |
+| --------- | ---------------------------- | ---------------------------------------------------------------------- |
+| OLTP      | **SQLite** file, single‑user | Switch to **Postgres 15** with alembic migrations, row‑level security. |
+| Analytics | Pandas in‑memory             | Consider DuckDB or Materialized Views for heavy queries.               |
+
+### 6.2 Backend Services
+
+* **Ingestion package** (`ingestion/*`) – adapters, validators, transformers.
+* **Price Service** – caches EOD & intraday quotes.
+* **Reporting Service** – generates positions, performance, tax lots.
+
+### 6.3 Frontend
+
+* **Now** – Streamlit multipage app.
+* **Later** – Evaluate:
+
+  1. Next.js 14 App Router + Mantine UI + tRPC
+  2. Django‑HTMX + Tailwind
+     Decision gate in Phase 2.
+
+### 6.4 Integration & Deployment
+
+* GitHub Actions → pytest, ruff, mypy, Streamlit E2E tests.
+* Containerised build (Docker) → Fly.io or Render for staging.
+* Secrets via 1Password Connect.
+
+---
+
+## 7  Non‑Functional Requirements
+
+* **Security** – OWASP Top 10, TLS 1.3, SCA scan.
+* **Performance** – <200 ms dashboard TTFB for 3‑year, 5‑asset portfolio; scalable to 2 k trades.
+* **Observability** – Structured logs, Prometheus metrics, Grafana alerts.
+
+---
+
+## 8  Sprint Plan (6 × 2‑week sprints)
+
+| Sprint       | Theme                    | Exit Criteria                                                                               |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------------------- |
+| **Sprint 1** | Ingestion & DB hardening | Modular `db/` + context manager; asset enum; ≥85 % unit test coverage on ingestion.         |
+| **Sprint 2** | Multi‑Asset CSVs         | Import stocks/bonds/options CSV; schema migration scripts; analytics pass all tests.        |
+| **Sprint 3** | Pro‑Investor MVP         | Cross‑exchange aggregation view; exposure by asset class; performance dashboard passes UAT. |
+| Sprint 4     | Postgres Migration       | Greenfield PG instance w/ migrations; performance parity with SQLite.                       |
+| Sprint 5     | API Connectors           | Live sync for Coinbase, Alpaca; background task queue.                                      |
+| Sprint 6     | UI Framework Decision    | POC for Next.js & Django options; stakeholder demo & selection.                             |
+
+---
+
+## 9  Risks & Mitigations
+
+| Risk                        | Impact          | Mitigation                                    |
+| --------------------------- | --------------- | --------------------------------------------- |
+| CSV format sprawl           | Import failures | Adapter pattern + CI fixture bank per broker. |
+| Postgres migration downtime | Data loss       | Run pgloader in parallel + backfill tests.    |
+| Framework switch delay      | UI stagnation   | Gate decision to Sprint 6 with POC criteria.  |
+
+---
+
+*End document.*
