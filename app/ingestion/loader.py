@@ -133,7 +133,8 @@ def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
                 print(f"Found asset columns for 2024 data: {assets}")
                 
                 # Import price service for historical price data
-                from price_service import price_service
+                from app.services.price_service import PriceService
+                price_service = PriceService()
                 
                 for asset in assets:
                     amount_col = f"{asset} Amount {asset}"
@@ -859,10 +860,17 @@ def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
                         else:
                             print(f"\n=== DEBUG: No valid timestamps for {asset} in latest added transactions ===")
         else:
-            # For other institutions, process normally
-            processed_df = ingest_csv(file_path, mapping['mapping'])
-            processed_df['institution'] = institution
-            all_transactions.append(processed_df)
+            # For other institutions, process based on institution type
+            if institution == 'interactive_brokers':
+                # Use custom Interactive Brokers processing
+                processed_df = process_interactive_brokers_csv(file_path, mapping)
+            else:
+                # For other institutions, process normally
+                processed_df = ingest_csv(file_path, mapping['mapping'])
+                processed_df['institution'] = institution
+            
+            if not processed_df.empty:
+                all_transactions.append(processed_df)
     
     # When done with processing files, add the special 2024 Gemini transactions to all_transactions
     if gemini_2024_transactions:
@@ -920,7 +928,7 @@ def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
     # --- END DEBUG ---
 
     # Import and apply normalization
-    from normalization import normalize_data
+    from app.ingestion.normalization import normalize_data
     combined_df = normalize_data(combined_df)
     
     # Final check for 2024 transactions after normalization
@@ -941,3 +949,121 @@ def process_transactions(data_dir: str, config_path: str) -> pd.DataFrame:
             print("\n=== DEBUG: No valid timestamps after normalization ===")
     
     return combined_df
+
+
+def process_interactive_brokers_csv(file_path: str, mapping: dict) -> pd.DataFrame:
+    """
+    Process Interactive Brokers CSV file with special handling for their format.
+    """
+    print(f"Processing Interactive Brokers file: {file_path}")
+    
+    # Read the CSV file
+    df = pd.read_csv(file_path)
+    print(f"Loaded {len(df)} rows from Interactive Brokers CSV")
+    
+    # Parse timestamp using original column name
+    df['timestamp'] = pd.to_datetime(df['Date'], errors='coerce')
+    
+    # Clean numeric columns using original column names
+    numeric_cols = ['Quantity', 'Price', 'Gross Amount', 'Commission', 'Net Amount']
+    for col in numeric_cols:
+        if col in df.columns:
+            # Handle string values and remove currency symbols/commas
+            df[col] = df[col].astype(str).str.replace('$', '').str.replace(',', '')
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    
+    # Create standardized columns
+    processed_rows = []
+    
+    for _, row in df.iterrows():
+        # Skip rows with missing essential data
+        if pd.isna(row['timestamp']) or row['Transaction Type'] in ['Other Fee', 'Commission Adjustment']:
+            continue
+            
+        # Handle different transaction types
+        transaction_type = row['Transaction Type']
+        symbol = row['Symbol'] if pd.notna(row['Symbol']) and row['Symbol'] != '-' else None
+        quantity = row['Quantity'] if pd.notna(row['Quantity']) else 0
+        price = row['Price'] if pd.notna(row['Price']) else 0
+        
+        # For stock/ETF transactions
+        if transaction_type in ['Buy', 'Sell'] and symbol:
+            processed_row = {
+                'timestamp': row['timestamp'],
+                'type': transaction_type,
+                'asset': symbol,
+                'quantity': abs(quantity) if transaction_type == 'Buy' else -abs(quantity),
+                'price': abs(price),
+                'fees': abs(row['Commission']) if pd.notna(row['Commission']) else 0,
+                'subtotal': abs(row['Gross Amount']) if pd.notna(row['Gross Amount']) else 0,
+                'total': abs(row['Net Amount']) if pd.notna(row['Net Amount']) else 0,
+                'account': row['Account'],
+                'description': row['Description'],
+                'institution': 'interactive_brokers'
+            }
+            processed_rows.append(processed_row)
+            
+        # For cash transactions (deposits, withdrawals, dividends, interest)
+        elif transaction_type in ['Deposit', 'Withdrawal', 'Dividend', 'Credit Interest', 'Electronic Fund Transfer']:
+            # For cash transactions, use USD as the asset
+            asset = 'USD'
+            net_amount = row['Net Amount'] if pd.notna(row['Net Amount']) else 0
+            
+            # Determine quantity based on transaction type and amount
+            if transaction_type in ['Deposit', 'Electronic Fund Transfer']:
+                quantity_val = abs(net_amount)
+            elif transaction_type == 'Withdrawal':
+                quantity_val = -abs(net_amount)
+            elif transaction_type in ['Dividend', 'Credit Interest']:
+                quantity_val = abs(net_amount)
+                asset = 'USD'  # Dividends and interest are in USD
+            else:
+                quantity_val = net_amount
+            
+            processed_row = {
+                'timestamp': row['timestamp'],
+                'type': transaction_type,
+                'asset': asset,
+                'quantity': quantity_val,
+                'price': 1.0,  # USD to USD price is 1
+                'fees': 0,
+                'subtotal': abs(net_amount),
+                'total': abs(net_amount),
+                'account': row['Account'],
+                'description': row['Description'],
+                'institution': 'interactive_brokers'
+            }
+            processed_rows.append(processed_row)
+            
+        # For cash transfers between accounts
+        elif transaction_type == 'Cash Transfer':
+            net_amount = row['Net Amount'] if pd.notna(row['Net Amount']) else 0
+            
+            processed_row = {
+                'timestamp': row['timestamp'],
+                'type': 'Cash Transfer',
+                'asset': 'USD',
+                'quantity': net_amount,  # Keep sign to indicate direction
+                'price': 1.0,
+                'fees': 0,
+                'subtotal': abs(net_amount),
+                'total': abs(net_amount),
+                'account': row['Account'],
+                'description': row['Description'],
+                'institution': 'interactive_brokers'
+            }
+            processed_rows.append(processed_row)
+    
+    # Convert to DataFrame
+    if processed_rows:
+        result_df = pd.DataFrame(processed_rows)
+        print(f"Processed {len(result_df)} Interactive Brokers transactions")
+        
+        # Show sample of processed data
+        print("Sample processed transactions:")
+        print(result_df[['timestamp', 'type', 'asset', 'quantity', 'price']].head())
+        
+        return result_df
+    else:
+        print("No valid transactions found in Interactive Brokers file")
+        return pd.DataFrame()
