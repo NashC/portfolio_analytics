@@ -1,0 +1,68 @@
+{
+  "dashboard": {
+    "title": "Portfolio Analytics Pro",
+    "version": "2.0",
+    "theme": {
+      "primary_color": "#1f77b4",
+      "secondary_color": "#ff7f0e",
+      "success_color": "#2ca02c",
+      "danger_color": "#d62728",
+      "background_gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+    },
+    "performance": {
+      "cache_ttl_data": 300,
+      "cache_ttl_charts": 300,
+      "cache_ttl_metrics": 600,
+      "pagination_size": 25,
+      "max_chart_points": 1000
+    },
+    "features": {
+      "real_time_monitoring": true,
+      "export_capabilities": true,
+      "responsive_design": true,
+      "dark_mode": false,
+      "multi_currency": false
+    }
+  },
+  "analytics": {
+    "default_risk_free_rate": 0.02,
+    "confidence_levels": [
+      0.95,
+      0.99
+    ],
+    "benchmark_symbols": [
+      "SPY",
+      "BTC-USD"
+    ],
+    "supported_cost_basis_methods": [
+      "FIFO",
+      "LIFO",
+      "Average"
+    ]
+  },
+  "data": {
+    "supported_exchanges": [
+      "Binance US",
+      "Coinbase",
+      "Gemini"
+    ],
+    "supported_asset_types": [
+      "crypto",
+      "stock",
+      "bond",
+      "option"
+    ],
+    "required_columns": [
+      "timestamp",
+      "type",
+      "asset",
+      "quantity",
+      "price"
+    ],
+    "optional_columns": [
+      "fees",
+      "source_account",
+      "destination_account"
+    ]
+  }
+}
