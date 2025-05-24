@@ -1,5 +1,5 @@
 import pandas as pd
-from utils import clean_numeric_column
+from app.commons.utils import clean_numeric_column
 
 # Expanded mapping for raw transaction types to our canonical set.
 TRANSACTION_TYPE_MAP = {

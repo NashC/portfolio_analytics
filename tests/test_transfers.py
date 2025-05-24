@@ -24,6 +24,11 @@ def test_reconcile_transfers():
             0.5,
             0.5,
             1.0
+        ],
+        "institution": [  # Add institution column
+            "binanceus",
+            "coinbase",
+            "coinbase"
         ]
     }
     df = pd.DataFrame(data)

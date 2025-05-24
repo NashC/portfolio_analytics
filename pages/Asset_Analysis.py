@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
@@ -7,6 +8,11 @@ from reporting import PortfolioReporting
 from menu import render_navigation
 from plotly.subplots import make_subplots
 from streamlit.components.v1 import html
+from app.analytics.portfolio import (
+    compute_portfolio_time_series,
+    compute_portfolio_time_series_with_external_prices
+)
+from app.services.price_service import PriceService
 
 # Define helper functions for transaction analysis
 def identify_internal_transfer(row, all_transactions):
@@ -89,7 +95,7 @@ def get_transaction_type_symbol(transaction_type):
 # Must be the first Streamlit command
 st.set_page_config(
     page_title="Asset Analysis",
-    page_icon="🔍",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -1085,6 +1091,123 @@ def display_transaction_statistics(reporter, asset_symbol, transactions):
         
         st.plotly_chart(fig, use_container_width=True)
 
+def calculate_returns(prices: pd.Series) -> pd.Series:
+    """Calculate daily returns from price series"""
+    return prices.pct_change().dropna()
+
+def calculate_volatility(returns: pd.Series) -> float:
+    """Calculate annualized volatility from daily returns"""
+    return returns.std() * np.sqrt(252) * 100  # Annualized and as percentage
+
+def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.02) -> float:
+    """Calculate Sharpe ratio from daily returns"""
+    excess_returns = returns - risk_free_rate/252  # Daily risk-free rate
+    return np.sqrt(252) * excess_returns.mean() / returns.std()
+
+def calculate_max_drawdown(prices: pd.Series) -> float:
+    """Calculate maximum drawdown from price series"""
+    rolling_max = prices.expanding().max()
+    drawdowns = (prices - rolling_max) / rolling_max
+    return drawdowns.min() * 100  # As percentage
+
+def calculate_best_worst_day(returns: pd.Series) -> tuple:
+    """Calculate best and worst daily returns"""
+    return returns.max() * 100, returns.min() * 100  # As percentages
+
+def display_asset_analysis(transactions: pd.DataFrame):
+    """Display detailed analysis for each asset"""
+    st.header("Asset Analysis")
+    
+    # Get unique assets
+    assets = sorted(transactions['asset'].unique())
+    selected_asset = st.selectbox("Select Asset", assets)
+    
+    if not selected_asset:
+        st.warning("No asset selected")
+        return
+    
+    # Filter transactions for selected asset
+    asset_transactions = transactions[transactions['asset'] == selected_asset].copy()
+    
+    if asset_transactions.empty:
+        st.warning(f"No transactions found for {selected_asset}")
+        return
+    
+    # Calculate portfolio value over time
+    portfolio_value = compute_portfolio_time_series_with_external_prices(asset_transactions)
+    
+    if portfolio_value.empty:
+        st.warning(f"No price data available for {selected_asset}")
+        return
+    
+    # Calculate metrics
+    returns = calculate_returns(portfolio_value[selected_asset])
+    volatility = calculate_volatility(returns)
+    sharpe_ratio = calculate_sharpe_ratio(returns)
+    max_drawdown = calculate_max_drawdown(portfolio_value[selected_asset])
+    best_day, worst_day = calculate_best_worst_day(returns)
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Volatility", f"{volatility:.2f}%")
+        st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+    with col2:
+        st.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+        st.metric("Best Day", f"{best_day:.2f}%")
+    with col3:
+        st.metric("Worst Day", f"{worst_day:.2f}%")
+    
+    # Create price chart
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                       vertical_spacing=0.03, subplot_titles=('Price', 'Volume'),
+                       row_heights=[0.7, 0.3])
+    
+    # Add price line
+    fig.add_trace(
+        go.Scatter(x=portfolio_value.index, y=portfolio_value[selected_asset],
+                  name='Price', line=dict(color='blue')),
+        row=1, col=1
+    )
+    
+    # Add volume bars
+    fig.add_trace(
+        go.Bar(x=asset_transactions['timestamp'], y=asset_transactions['amount'],
+               name='Volume', marker_color='gray'),
+        row=2, col=1
+    )
+    
+    # Update layout
+    fig.update_layout(
+        title=f"{selected_asset} Price and Volume",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        height=800,
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Display transaction history
+    st.subheader("Transaction History")
+    st.dataframe(asset_transactions, hide_index=True, use_container_width=True)
+    
+    # Display holdings over time
+    st.subheader("Holdings Over Time")
+    holdings = asset_transactions['amount'].cumsum()
+    holdings_chart = go.Figure()
+    holdings_chart.add_trace(
+        go.Scatter(x=asset_transactions['timestamp'], y=holdings,
+                  name='Holdings', line=dict(color='green'))
+    )
+    holdings_chart.update_layout(
+        title=f"{selected_asset} Holdings Over Time",
+        xaxis_title="Date",
+        yaxis_title="Amount",
+        height=400
+    )
+    st.plotly_chart(holdings_chart, use_container_width=True)
+
 def main():
     """Main function for the Asset Analysis page"""
     st.title("Asset Analysis")
@@ -1269,6 +1392,9 @@ def main():
         
         # Display transaction statistics based on filtered data
         display_transaction_statistics(reporter, asset_symbol, filtered_transactions)
+
+    # Display asset analysis
+    display_asset_analysis(transactions)
 
 if __name__ == "__main__":
     main() 

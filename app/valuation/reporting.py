@@ -1637,16 +1637,24 @@ class PortfolioReporting:
         return self.transactions.copy()
         
     def get_portfolio_summary(self) -> Dict:
-        """Get portfolio summary metrics"""
+        report = self.generate_performance_report(period="YTD")
         return {
-            "total_value": 0.0,
-            "total_cost_basis": 0.0,
-            "total_unrealized_pl": 0.0
+            "total_value": report.get("total_value", 0.0),
+            "total_cost_basis": report["metrics"].get("initial_value", 0.0),
+            "total_unrealized_pl": report.get("total_value", 0.0) - report["metrics"].get("initial_value", 0.0)
         }
-        
+    
     def get_asset_allocation(self) -> pd.DataFrame:
-        """Get current asset allocation"""
-        return pd.DataFrame(columns=["asset", "value", "percentage"])
+        report = self.generate_performance_report(period="YTD")
+        allocation = report.get("current_allocation", {})
+        if not allocation:
+            return pd.DataFrame(columns=["asset", "value", "percentage"])
+        total_value = report.get("total_value", 0.0)
+        data = [
+            {"asset": asset, "value": total_value * pct / 100, "percentage": pct}
+            for asset, pct in allocation.items()
+        ]
+        return pd.DataFrame(data)
         
     def get_recent_transactions(self) -> pd.DataFrame:
         """Get recent transactions"""

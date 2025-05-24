@@ -2,11 +2,18 @@ import os
 import uuid
 import pandas as pd
 from datetime import datetime
-from ingestion import process_transactions
-from normalization import normalize_data
-from transfers import reconcile_transfers
-from analytics import compute_portfolio_time_series_with_external_prices
-from reporting import PortfolioReporting
+from app.ingestion import process_transactions
+from app.normalization import normalize_data
+from app.transfers import reconcile_transfers
+from app.analytics.portfolio import (
+    compute_portfolio_time_series,
+    compute_portfolio_time_series_with_external_prices,
+    calculate_cost_basis_fifo,
+    calculate_cost_basis_avg
+)
+from app.services.price_service import PriceService
+from app.db.session import get_db
+from app.db.base import Asset, PriceData
 
 def main():
     data_dir = "data/transaction_history"
@@ -35,7 +42,7 @@ def main():
 
     # Step 5: Export normalized data (lean format)
     canonical_columns = [
-        "transaction_id", "timestamp", "type", "asset", "quantity", "price", "fees",
+        "transaction_id", "timestamp", "type", "asset", "amount", "price", "fees",
         "subtotal", "total", "currency", "source_account", "destination_account", 
         "institution", "transfer_id", "matching_institution", "matching_date"
     ]
@@ -69,13 +76,13 @@ def main():
     normalized_transactions.to_csv(normalized_export_path, index=False)
     print(f"✅ Normalized transactions exported to: {normalized_export_path}")
 
-    # Initialize portfolio reporting
-    print("📊 Initializing portfolio reporting...")
-    reporter = PortfolioReporting(transactions)
+    # Initialize price service
+    print("📊 Initializing price service...")
+    price_service = PriceService()
 
     # Step 6: Portfolio value time series
     print("📈 Computing portfolio value time series...")
-    portfolio_ts = reporter.calculate_portfolio_value()
+    portfolio_ts = compute_portfolio_time_series_with_external_prices(normalized_transactions)
     portfolio_ts.to_csv(os.path.join(output_dir, "portfolio_timeseries.csv"))
     print("✅ Portfolio time series exported.")
 
@@ -83,18 +90,47 @@ def main():
     print("🧾 Generating tax reports...")
     current_year = datetime.now().year
     for year in range(current_year - 2, current_year + 1):
-        tax_lots, summary = reporter.generate_tax_report(year)
-        if not tax_lots.empty:
-            tax_lots.to_csv(os.path.join(output_dir, f"tax_lots_{year}.csv"), index=False)
-            print(f"✅ Tax report for {year} exported:")
-            print(f"   - Net proceeds: ${summary['net_proceeds']:,.2f}")
-            print(f"   - Total gain/loss: ${summary['total_gain_loss']:,.2f}")
-            print(f"   - Short-term gain/loss: ${summary['short_term_gain_loss']:,.2f}")
-            print(f"   - Long-term gain/loss: ${summary['long_term_gain_loss']:,.2f}")
+        # Filter transactions for the year
+        year_transactions = normalized_transactions[
+            normalized_transactions['timestamp'].dt.year == year
+        ]
+        
+        if not year_transactions.empty:
+            # Calculate FIFO cost basis
+            fifo_basis = calculate_cost_basis_fifo(year_transactions)
+            if not fifo_basis.empty:
+                fifo_basis.to_csv(os.path.join(output_dir, f"tax_lots_fifo_{year}.csv"), index=False)
+                print(f"✅ FIFO tax report for {year} exported:")
+                print(f"   - Total proceeds: ${fifo_basis['amount'] * fifo_basis['price']:,.2f}")
+                print(f"   - Total cost basis: ${fifo_basis['amount'] * fifo_basis['cost_basis']:,.2f}")
+                print(f"   - Total gain/loss: ${fifo_basis['gain_loss'].sum():,.2f}")
+            
+            # Calculate average cost basis
+            avg_basis = calculate_cost_basis_avg(year_transactions)
+            if not avg_basis.empty:
+                avg_basis.to_csv(os.path.join(output_dir, f"tax_lots_avg_{year}.csv"), index=False)
+                print(f"✅ Average cost tax report for {year} exported:")
+                print(f"   - Total cost basis: ${avg_basis['avg_cost_basis'].sum():,.2f}")
 
     # Step 8: Generate performance reports
     print("\n📊 Generating performance reports...")
-    reporter.generate_performance_report()
+    # Calculate performance metrics
+    returns = portfolio_ts.pct_change().dropna()
+    volatility = returns.std() * (252 ** 0.5) * 100  # Annualized volatility
+    sharpe_ratio = (returns.mean() * 252) / (returns.std() * (252 ** 0.5))
+    max_drawdown = ((portfolio_ts / portfolio_ts.expanding().max() - 1) * 100).min()
+    
+    performance_metrics = pd.DataFrame({
+        'Metric': ['Total Return', 'Volatility', 'Sharpe Ratio', 'Max Drawdown'],
+        'Value': [
+            f"{((portfolio_ts.iloc[-1] / portfolio_ts.iloc[0] - 1) * 100):.2f}%",
+            f"{volatility:.2f}%",
+            f"{sharpe_ratio:.2f}",
+            f"{max_drawdown:.2f}%"
+        ]
+    })
+    
+    performance_metrics.to_csv(os.path.join(output_dir, "performance_metrics.csv"), index=False)
     print("✅ Performance report exported.")
 
     print("\n🏁 Pipeline complete.")

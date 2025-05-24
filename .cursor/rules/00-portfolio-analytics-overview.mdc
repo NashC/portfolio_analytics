@@ -1,0 +1,123 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Portfolio Analytics - Complete Project Overview
+
+## 🎯 Project Status: ✅ PRODUCTION READY (v2.0)
+
+This is a comprehensive financial analytics application for tracking portfolio performance, holdings, and tax-relevant metrics across multiple financial institutions.
+
+**Performance**: 🟢 Excellent | **Test Coverage**: 85/91 (93.4%) | **Dashboard**: 5-6x faster than v1
+
+## 🏗️ Core Architecture
+
+### Enhanced Dashboard (✅ PRODUCTION READY)
+- [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py) - Enhanced dashboard with 5-6x performance improvement
+- [ui/components/charts.py](mdc:ui/components/charts.py) - Reusable chart components with caching
+- [ui/components/metrics.py](mdc:ui/components/metrics.py) - KPI displays and performance indicators
+- [ui/streamlit_app.py](mdc:ui/streamlit_app.py) - Original dashboard (legacy)
+
+### Portfolio Returns System (✅ WORKING)
+- [app/valuation/portfolio.py](mdc:app/valuation/portfolio.py) - Portfolio valuation with vectorized operations
+- [app/analytics/returns.py](mdc:app/analytics/returns.py) - Returns calculation library (daily, cumulative, TWRR)
+- [app/api/__init__.py](mdc:app/api/__init__.py) - REST API endpoints for portfolio value and returns
+- [app/ingestion/update_positions.py](mdc:app/ingestion/update_positions.py) - Position tracking engine
+
+### Data Processing Pipeline
+- [ingestion.py](mdc:ingestion.py) - Handles raw transaction data ingestion
+- [normalization.py](mdc:normalization.py) - Normalizes different transaction schemas
+- [analytics.py](mdc:analytics.py) - Computes portfolio metrics and tax calculations
+- [app/services/price_service.py](mdc:app/services/price_service.py) - Manages historical price data
+
+### Database Layer
+- [app/db/base.py](mdc:app/db/base.py) - SQLAlchemy models and database schema
+- [app/db/session.py](mdc:app/db/session.py) - Database session management
+- [migration.py](mdc:migration.py) - Database migration and data import
+- [schema.sql](mdc:schema.sql) - Database schema definitions
+
+## 📊 Key Features & Achievements
+
+### ✅ Completed Features
+- Multi-source transaction ingestion (Binance US, Coinbase, Gemini)
+- Unified transaction ledger with 3,795+ transactions
+- Asset-level holdings tracking across 36 assets
+- Portfolio valuation with vectorized operations
+- Daily, cumulative, and TWRR returns calculations
+- REST API for portfolio value and returns
+- Enhanced Streamlit dashboard with professional design
+- Tax reporting capabilities (FIFO and Average cost basis)
+- Real-time performance monitoring
+- Export capabilities for all data views
+
+### 🚀 Performance Achievements
+- **Data Loading**: 0.008s for 3,795 transactions (🟢 Excellent)
+- **Memory Efficiency**: 1,357 records/MB with only 2.8MB overhead
+- **Dashboard Performance**: 5-6x faster than original implementation
+- **Test Coverage**: 85/91 tests passing (93.4% pass rate)
+
+## 🔄 Data Flow
+1. Raw CSV files → [ingestion.py](mdc:ingestion.py) → [normalization.py](mdc:normalization.py)
+2. Normalized data → [migration.py](mdc:migration.py) → SQLite database
+3. Portfolio calculations → [app/valuation/portfolio.py](mdc:app/valuation/portfolio.py)
+4. Visualization → [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py)
+
+## 🚀 Quick Start Commands
+
+### Launch Enhanced Dashboard
+```bash
+# From project root with PYTHONPATH
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+```
+
+### Run Tests
+```bash
+# Full test suite (85/91 passing)
+python -m pytest tests/ -v
+
+# Portfolio-specific tests
+python test_portfolio_simple.py
+python test_portfolio_returns_with_real_data.py
+```
+
+### Performance Benchmarking
+```bash
+python scripts/simple_benchmark.py
+python scripts/demo_dashboard.py
+```
+
+## 📁 Project Structure
+```
+portfolio_analytics/
+├── app/                    # Core application modules
+│   ├── analytics/         # Portfolio analysis and returns
+│   ├── api/              # REST API endpoints
+│   ├── db/               # Database models and sessions
+│   ├── ingestion/        # Data ingestion and normalization
+│   ├── services/         # Business logic services
+│   └── valuation/        # Portfolio valuation and reporting
+├── ui/                    # Dashboard and components
+│   ├── components/       # Reusable UI components
+│   ├── streamlit_app_v2.py  # Enhanced dashboard
+│   └── streamlit_app.py     # Legacy dashboard
+├── tests/                 # Comprehensive test suite
+├── scripts/              # Utility and benchmark scripts
+├── data/                 # Input CSV files
+├── output/               # Generated reports and exports
+└── config/               # Configuration files
+```
+
+## 📚 Documentation & Configuration
+- [DASHBOARD_COMPLETION_SUMMARY.md](mdc:DASHBOARD_COMPLETION_SUMMARY.md) - Complete project summary
+- [PERFORMANCE_SUMMARY.md](mdc:PERFORMANCE_SUMMARY.md) - Performance metrics and benchmarks
+- [FINAL_CHECKLIST.md](mdc:FINAL_CHECKLIST.md) - Production readiness checklist
+- [config/dashboard_config.json](mdc:config/dashboard_config.json) - Dashboard configuration
+- [app/settings.py](mdc:app/settings.py) - Application configuration
+
+## 🎯 Development Status
+- **Version**: 2.0
+- **Status**: ✅ Production Ready
+- **Performance Rating**: 🟢 Excellent
+- **Last Updated**: May 24, 2025
+- **Next Phase**: Multi-asset expansion and API connectors
