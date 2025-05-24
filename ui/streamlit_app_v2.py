@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import warnings
+import psutil
+import os
 warnings.filterwarnings('ignore')
 
 # Import our modules
@@ -23,6 +25,7 @@ from app.analytics.portfolio import (
 from app.services.price_service import PriceService
 from app.db.session import get_db
 from app.db.base import Asset, PriceData
+from app.analytics.returns import daily_returns, cumulative_returns, volatility, sharpe_ratio, maximum_drawdown
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -181,97 +184,122 @@ class PerformanceMonitor:
 # Initialize performance monitor
 perf_monitor = PerformanceMonitor()
 
-@st.cache_data(ttl=300, show_spinner=False)  # Cache for 5 minutes
-def load_transactions() -> Optional[pd.DataFrame]:
-    """Load and cache transaction data with error handling"""
-    perf_monitor.start_timer("load_transactions")
-    
+@st.cache_data(ttl=300, show_spinner=False)
+def load_normalized_transactions() -> Optional[pd.DataFrame]:
+    """Load normalized transaction data with enhanced error handling."""
     try:
         transactions = pd.read_csv("output/transactions_normalized.csv", parse_dates=["timestamp"])
-        if transactions.empty:
-            st.error("❌ No transaction data found.")
-            return None
         
-        # Data quality checks
+        # Add compatibility layer for amount/quantity column
+        if 'amount' not in transactions.columns and 'quantity' in transactions.columns:
+            transactions['amount'] = transactions['quantity']
+            st.info("ℹ️ Using 'quantity' column as 'amount' for compatibility")
+        elif 'quantity' not in transactions.columns and 'amount' in transactions.columns:
+            transactions['quantity'] = transactions['amount']
+        
+        # Validate required columns
         required_columns = ['timestamp', 'type', 'asset', 'amount', 'price']
         missing_columns = [col for col in required_columns if col not in transactions.columns]
         if missing_columns:
             st.error(f"❌ Missing required columns: {missing_columns}")
             return None
         
-        # Clean and validate data
+        # Data cleaning and validation
         transactions = transactions.dropna(subset=['asset', 'amount'])
-        transactions['asset'] = transactions['asset'].astype(str).str.strip()
+        transactions['timestamp'] = pd.to_datetime(transactions['timestamp'])
         
-        perf_monitor.end_timer("load_transactions")
+        # Convert numeric columns to float for calculations
+        numeric_columns = ['amount', 'price', 'fees']
+        for col in numeric_columns:
+            if col in transactions.columns:
+                transactions[col] = pd.to_numeric(transactions[col], errors='coerce').fillna(0)
+        
         return transactions
         
     except FileNotFoundError:
-        st.error("❌ Transaction data file not found. Please run the data pipeline first.")
+        st.error("❌ Normalized transaction data not found. Please run the data pipeline first.")
+        st.code("PYTHONPATH=$(pwd) python -c \"from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')\"")
         return None
     except Exception as e:
         st.error(f"❌ Error loading transaction data: {str(e)}")
-        logger.error(f"Error loading transactions: {e}")
         return None
 
-@st.cache_data(ttl=600, show_spinner=False)  # Cache for 10 minutes
+@st.cache_data(ttl=600, show_spinner=False)
 def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
-    """Compute comprehensive portfolio metrics with caching"""
-    perf_monitor.start_timer("compute_portfolio_metrics")
-    
+    """Compute comprehensive portfolio metrics using external price data."""
     try:
-        # Portfolio time series
+        # Use external price data for portfolio calculation
         portfolio_ts = compute_portfolio_time_series_with_external_prices(transactions)
         
-        if portfolio_ts.empty:
-            return {'error': 'No portfolio data available'}
+        if portfolio_ts.empty or 'total' not in portfolio_ts.columns:
+            return {
+                'current_value': 0.0,
+                'total_return': 0.0,
+                'total_return_pct': 0.0,
+                'annualized_return': 0.0,
+                'volatility': 0.0,
+                'sharpe_ratio': 0.0,
+                'max_drawdown': 0.0,
+                'best_day': 0.0,
+                'worst_day': 0.0,
+                'portfolio_ts': pd.DataFrame()
+            }
+        
+        # Convert to float to avoid Decimal issues
+        total_values = portfolio_ts['total'].astype(float)
         
         # Calculate returns
-        returns = portfolio_ts['total'].pct_change().dropna()
-        
-        # Performance metrics
-        total_return = (portfolio_ts['total'].iloc[-1] / portfolio_ts['total'].iloc[0] - 1) * 100
-        annualized_return = ((portfolio_ts['total'].iloc[-1] / portfolio_ts['total'].iloc[0]) ** (252 / len(portfolio_ts)) - 1) * 100
-        volatility = returns.std() * np.sqrt(252) * 100
-        sharpe_ratio = (returns.mean() * 252) / (returns.std() * np.sqrt(252)) if returns.std() > 0 else 0
-        
-        # Drawdown calculation
-        rolling_max = portfolio_ts['total'].expanding().max()
-        drawdown = (portfolio_ts['total'] / rolling_max - 1) * 100
-        max_drawdown = drawdown.min()
-        
-        # Best/worst days
-        best_day = returns.max() * 100
-        worst_day = returns.min() * 100
+        returns = daily_returns(total_values)
         
         # Current portfolio value
-        current_value = portfolio_ts['total'].iloc[-1]
+        current_value = float(total_values.iloc[-1]) if len(total_values) > 0 else 0.0
+        initial_value = float(total_values.iloc[0]) if len(total_values) > 0 else 1.0
         
-        # Cost basis calculation
-        cost_basis_data = calculate_cost_basis_avg(transactions)
-        total_cost_basis = cost_basis_data['avg_cost_basis'].sum() if not cost_basis_data.empty else 0
+        # Total return
+        total_return = current_value - initial_value
+        total_return_pct = (current_value / initial_value - 1) * 100 if initial_value != 0 else 0.0
         
-        metrics = {
+        # Annualized return
+        days = len(total_values)
+        years = days / 365.25 if days > 0 else 1
+        annualized_return = ((current_value / initial_value) ** (1/years) - 1) * 100 if initial_value != 0 and years > 0 else 0.0
+        
+        # Risk metrics
+        vol = volatility(returns, annualized=True) if len(returns) > 1 else 0.0
+        sharpe = sharpe_ratio(returns) if len(returns) > 1 else 0.0
+        max_dd = maximum_drawdown(total_values) if len(total_values) > 1 else 0.0
+        
+        # Best and worst days
+        best_day = float(returns.max()) * 100 if len(returns) > 0 else 0.0
+        worst_day = float(returns.min()) * 100 if len(returns) > 0 else 0.0
+        
+        return {
             'current_value': current_value,
-            'total_cost_basis': total_cost_basis,
             'total_return': total_return,
+            'total_return_pct': total_return_pct,
             'annualized_return': annualized_return,
-            'volatility': volatility,
-            'sharpe_ratio': sharpe_ratio,
-            'max_drawdown': max_drawdown,
+            'volatility': vol,
+            'sharpe_ratio': sharpe,
+            'max_drawdown': max_dd,
             'best_day': best_day,
             'worst_day': worst_day,
-            'portfolio_ts': portfolio_ts,
-            'returns': returns,
-            'drawdown': drawdown
+            'portfolio_ts': portfolio_ts
         }
         
-        perf_monitor.end_timer("compute_portfolio_metrics")
-        return metrics
-        
     except Exception as e:
-        logger.error(f"Error computing portfolio metrics: {e}")
-        return {'error': f'Error computing metrics: {str(e)}'}
+        st.error(f"❌ Error computing portfolio metrics: {str(e)}")
+        return {
+            'current_value': 0.0,
+            'total_return': 0.0,
+            'total_return_pct': 0.0,
+            'annualized_return': 0.0,
+            'volatility': 0.0,
+            'sharpe_ratio': 0.0,
+            'max_drawdown': 0.0,
+            'best_day': 0.0,
+            'worst_day': 0.0,
+            'portfolio_ts': pd.DataFrame()
+        }
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_asset_allocation(transactions: pd.DataFrame) -> pd.DataFrame:
@@ -414,23 +442,46 @@ def create_asset_allocation_chart(allocation: pd.DataFrame):
 
 def display_performance_dashboard():
     """Display the main performance dashboard"""
-    st.markdown("## 📊 Portfolio Performance Dashboard")
+    st.header("📊 Portfolio Performance Dashboard")
     
-    # Load data
-    transactions = load_transactions()
-    if transactions is None:
+    # Load and validate normalized data
+    transactions = load_normalized_transactions()
+    if transactions is None or transactions.empty:
+        st.error("❌ No transaction data available. Please run the data pipeline first.")
+        st.code("PYTHONPATH=$(pwd) python -c \"from app.ingestion.loader import process_transactions; ...\"")
         return
     
-    # Compute metrics
-    with st.spinner("🔄 Computing portfolio metrics..."):
+    # Validate required columns
+    required_columns = ['timestamp', 'type', 'asset', 'quantity', 'price', 'institution']
+    missing_columns = [col for col in required_columns if col not in transactions.columns]
+    if missing_columns:
+        st.error(f"❌ Missing required columns: {missing_columns}")
+        return
+    
+    # Display basic stats
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Transactions", f"{len(transactions):,}")
+    with col2:
+        st.metric("Unique Assets", f"{transactions['asset'].nunique()}")
+    with col3:
+        st.metric("Institutions", f"{transactions['institution'].nunique()}")
+    with col4:
+        date_range = f"{transactions['timestamp'].min().strftime('%Y-%m-%d')} to {transactions['timestamp'].max().strftime('%Y-%m-%d')}"
+        st.metric("Date Range", date_range)
+    
+    # Compute portfolio metrics with progress indicator
+    with st.spinner("🔄 Computing portfolio metrics with historical price data..."):
         metrics = compute_portfolio_metrics(transactions)
     
-    if 'error' in metrics:
-        st.error(f"❌ {metrics['error']}")
+    # Check if metrics computation was successful
+    if 'portfolio_ts' not in metrics or metrics['portfolio_ts'].empty:
+        st.warning("⚠️ Portfolio calculation returned no data. This may be due to missing price data.")
+        st.info("💡 The system prioritizes historical CSV price data, then falls back to external APIs.")
         return
     
-    # Display key metrics
-    st.markdown("### 📈 Key Performance Indicators")
+    # Key Performance Indicators
+    st.header("📈 Key Performance Indicators")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -438,13 +489,13 @@ def display_performance_dashboard():
         st.metric(
             "Portfolio Value",
             f"${metrics['current_value']:,.2f}",
-            f"${metrics['current_value'] - metrics['total_cost_basis']:,.2f}"
+            f"${metrics['total_return']:,.2f}"
         )
     
     with col2:
         st.metric(
-            "Total Return",
-            f"{metrics['total_return']:.2f}%",
+            "Total Return", 
+            f"{metrics['total_return_pct']:.2f}%",
             f"{metrics['annualized_return']:.2f}% annualized"
         )
     
@@ -500,7 +551,7 @@ def display_transaction_analysis():
     """Display transaction analysis page"""
     st.markdown("## 📋 Transaction Analysis")
     
-    transactions = load_transactions()
+    transactions = load_normalized_transactions()
     if transactions is None:
         return
     
@@ -621,7 +672,7 @@ def display_tax_reports():
     """Display tax reports page"""
     st.markdown("## 🧾 Tax Reports")
     
-    transactions = load_transactions()
+    transactions = load_normalized_transactions()
     if transactions is None:
         return
     
@@ -724,7 +775,7 @@ def main():
         st.markdown("---")
         
         # Quick stats
-        transactions = load_transactions()
+        transactions = load_normalized_transactions()
         if transactions is not None:
             st.markdown("### 📊 Quick Stats")
             st.metric("Total Transactions", len(transactions))

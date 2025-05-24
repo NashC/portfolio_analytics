@@ -32,6 +32,25 @@ coinbase:
     source_account: ""
     destination_account: ""
 
+interactive_brokers:
+  file_pattern: "interactive_brokers_transaction_history.csv"
+  mapping:
+    timestamp: "Date"
+    type: "Transaction Type"
+    asset: "Symbol"
+    quantity: "Quantity"
+    price: "Price"
+    gross_amount: "Gross Amount"
+    commission: "Commission"
+    net_amount: "Net Amount"
+    account: "Account"
+    description: "Description"
+    currency: "USD"
+    source_account: ""
+    destination_account: ""
+  constants:
+    institution: "interactive_brokers"
+
 gemini:
   staking:
     file_pattern: "gemini_staking_transaction_history.csv"
