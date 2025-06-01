@@ -242,7 +242,9 @@ def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
                 'max_drawdown': 0.0,
                 'best_day': 0.0,
                 'worst_day': 0.0,
-                'portfolio_ts': pd.DataFrame()
+                'portfolio_ts': pd.DataFrame(),
+                'returns': pd.Series(),
+                'drawdown': pd.Series()
             }
         
         # Convert to float to avoid Decimal issues
@@ -250,6 +252,10 @@ def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
         
         # Calculate returns
         returns = daily_returns(total_values)
+        
+        # Calculate drawdown series for charting
+        peak_values = total_values.expanding().max()
+        drawdown_series = (total_values / peak_values - 1) * 100  # Convert to percentage
         
         # Current portfolio value
         current_value = float(total_values.iloc[-1]) if len(total_values) > 0 else 0.0
@@ -267,7 +273,13 @@ def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
         # Risk metrics
         vol = volatility(returns, annualized=True) if len(returns) > 1 else 0.0
         sharpe = sharpe_ratio(returns) if len(returns) > 1 else 0.0
-        max_dd = maximum_drawdown(total_values) if len(total_values) > 1 else 0.0
+        
+        # Fix: Extract only the drawdown value from the tuple
+        if len(total_values) > 1:
+            max_dd_tuple = maximum_drawdown(total_values)
+            max_dd = float(max_dd_tuple[0]) * 100  # Convert to percentage and extract first element
+        else:
+            max_dd = 0.0
         
         # Best and worst days
         best_day = float(returns.max()) * 100 if len(returns) > 0 else 0.0
@@ -283,7 +295,9 @@ def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
             'max_drawdown': max_dd,
             'best_day': best_day,
             'worst_day': worst_day,
-            'portfolio_ts': portfolio_ts
+            'portfolio_ts': portfolio_ts,
+            'returns': returns,
+            'drawdown': drawdown_series
         }
         
     except Exception as e:
@@ -298,7 +312,9 @@ def compute_portfolio_metrics(transactions: pd.DataFrame) -> Dict:
             'max_drawdown': 0.0,
             'best_day': 0.0,
             'worst_day': 0.0,
-            'portfolio_ts': pd.DataFrame()
+            'portfolio_ts': pd.DataFrame(),
+            'returns': pd.Series(),
+            'drawdown': pd.Series()
         }
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -604,11 +620,11 @@ def display_transaction_analysis():
         st.metric("Total Transactions", len(filtered_tx))
     
     with col2:
-        total_volume = (filtered_tx['amount'] * filtered_tx['price']).sum()
+        total_volume = (filtered_tx['quantity'] * filtered_tx['price']).sum()
         st.metric("Total Volume", f"${total_volume:,.2f}")
     
     with col3:
-        avg_size = (filtered_tx['amount'] * filtered_tx['price']).mean()
+        avg_size = (filtered_tx['quantity'] * filtered_tx['price']).mean()
         st.metric("Avg Transaction Size", f"${avg_size:,.2f}")
     
     with col4:
@@ -620,8 +636,8 @@ def display_transaction_analysis():
         st.markdown("### 📈 Transaction Type Breakdown")
         
         type_summary = filtered_tx.groupby('type').agg({
-            'amount': 'count',
-            'price': lambda x: (filtered_tx.loc[x.index, 'amount'] * x).sum()
+            'quantity': 'count',
+            'price': lambda x: (filtered_tx.loc[x.index, 'quantity'] * x).sum()
         }).round(2)
         type_summary.columns = ['Count', 'Total Value']
         
@@ -658,10 +674,9 @@ def display_transaction_analysis():
         
         st.dataframe(
             filtered_tx.iloc[start_idx:end_idx].style.format({
-                'amount': '{:.6f}',
+                'quantity': '{:.6f}',
                 'price': '${:.2f}',
-                'fees': '${:.2f}',
-                'total': '${:.2f}'
+                'fees': '${:.2f}'
             }),
             use_container_width=True
         )
@@ -700,8 +715,8 @@ def display_tax_reports():
     with tab1:
         if not fifo_lots.empty:
             total_gain_loss = fifo_lots['gain_loss'].sum()
-            total_proceeds = (fifo_lots['amount'] * fifo_lots['price']).sum()
-            total_cost = (fifo_lots['amount'] * fifo_lots['cost_basis']).sum()
+            total_proceeds = (fifo_lots['quantity'] * fifo_lots['price']).sum()
+            total_cost = (fifo_lots['quantity'] * fifo_lots['cost_basis']).sum()
             
             col1, col2, col3 = st.columns(3)
             with col1:

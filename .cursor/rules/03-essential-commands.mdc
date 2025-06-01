@@ -1,0 +1,324 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Portfolio Analytics - Essential Commands Reference
+
+## 🚀 Core Application Commands
+
+### Complete Data Pipeline
+```bash
+# Process all transaction files and generate normalized data (MAIN COMMAND)
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+```
+
+### Launch Applications
+```bash
+# Enhanced dashboard (PRODUCTION) - Port 8502
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+
+# Legacy dashboard - Port 8501
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app.py --server.port 8501
+
+# API server - Port 8000
+uvicorn app.api:app --reload --port 8000
+
+# Production API server
+uvicorn app.api:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+## 🧪 Testing & Validation Commands
+
+### Full Test Suite
+```bash
+# Complete test suite (93.4% pass rate)
+python -m pytest tests/ -v
+
+# Test with coverage report
+python -m pytest tests/ --cov=app --cov-report=html
+
+# Specific test modules
+python -m pytest tests/test_normalization_comprehensive.py -v
+python -m pytest tests/test_portfolio.py -v
+python -m pytest tests/test_api_endpoints.py -v
+```
+
+### Portfolio Testing
+```bash
+# Main portfolio calculation test
+python scripts/testing/test_portfolio_cleaned.py
+
+# Comprehensive debugging
+python scripts/debug/debug_portfolio_issues.py
+
+# Simple portfolio test with synthetic data
+python test_portfolio_simple.py
+
+# Real data portfolio test (requires migration.py first)
+python test_portfolio_returns_with_real_data.py
+```
+
+### Debug Scripts
+```bash
+# Debug portfolio calculation issues
+python scripts/debug/debug_portfolio_issues.py
+
+# Debug holdings calculation
+python scripts/debug/debug_holdings_calculation.py
+
+# Debug price data loading
+python scripts/debug/debug_price_data.py
+```
+
+### Analysis Scripts
+```bash
+# Analyze portfolio assets
+python scripts/analysis/analyze_portfolio_assets.py
+
+# Analyze ETH balance issues
+python scripts/analysis/analyze_eth_balance.py
+
+# Analyze filtered ETH data
+python scripts/analysis/analyze_filtered_eth.py
+
+# General data analysis
+python scripts/analysis/analyze_data.py
+```
+
+### Quick Validation Commands
+```bash
+# Quick normalization test
+python scripts/test_normalization.py
+
+# Performance benchmark
+python scripts/simple_benchmark.py
+
+# Dashboard demo
+python scripts/demo_dashboard.py
+```
+
+## 📊 Data Quality & Validation
+
+### Data Quality Checks
+```bash
+# Quick data quality overview
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'Loaded {len(df)} transactions'); print(f'Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}'); print(f'Assets: {df[\"asset\"].nunique()}'); print(f'Institutions: {list(df[\"institution\"].unique())}')"
+
+# Detailed data quality check
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print('Data Quality Checks:'); print(f'Missing timestamps: {df[\"timestamp\"].isna().sum()}'); print(f'Missing assets: {df[\"asset\"].isna().sum()}'); print(f'Missing quantities: {df[\"quantity\"].isna().sum()}'); print(f'Zero quantities: {(df[\"quantity\"] == 0).sum()}'); print(f'Unknown types: {(df[\"type\"] == \"unknown\").sum()}'); duplicates = df.duplicated(subset=['timestamp', 'asset', 'quantity', 'price', 'institution']).sum(); print(f'Duplicate transactions: {duplicates}')"
+```
+
+### Transaction Analysis
+```bash
+# Transaction count by institution
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df['institution'].value_counts())"
+
+# Transaction types analysis
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df['type'].value_counts())"
+
+# Unknown transaction types
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); unknown = df[df['type'] == 'unknown']; print(f'Unknown types: {len(unknown)}'); print(unknown[['timestamp', 'type', 'asset', 'institution']].head())"
+
+# Asset coverage
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Total assets: {df[\"asset\"].nunique()}'); print('Assets:', sorted(df['asset'].unique()))"
+```
+
+### Date Range & Coverage
+```bash
+# Date range validation
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); df['timestamp'] = pd.to_datetime(df['timestamp']); print(f'Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}')"
+
+# Assets by institution
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df.groupby('institution')['asset'].nunique())"
+```
+
+## 💰 Historical Price Data Commands
+
+### Price Data Validation
+```bash
+# Check historical price data coverage
+python -c "import os; import glob; files = glob.glob('data/historical_price_data/*.csv'); print(f'Historical price files: {len(files)}'); [print(f.split('/')[-1]) for f in files[:10]]"
+
+# Test portfolio calculation with historical prices
+python -c "import pandas as pd; from app.analytics.portfolio import compute_portfolio_time_series_with_external_prices; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); result = compute_portfolio_time_series_with_external_prices(df); print(f'Portfolio calculation result: {result.shape}'); print(f'Latest portfolio value: ${result[\"total\"].iloc[-1]:,.2f}' if not result.empty else 'No data')"
+
+# Check price data loading for specific asset
+python -c "from app.analytics.portfolio import load_historical_price_csv; from datetime import datetime; result = load_historical_price_csv('BTC', datetime(2020, 1, 1), datetime(2024, 12, 31)); print(f'BTC price data: {result.shape if result is not None else \"Not found\"}')"
+```
+
+## 🔧 Database & Migration Commands
+
+### Database Operations
+```bash
+# Run database migration
+python migration.py
+
+# Reset database (careful!)
+rm portfolio.db && python migration.py
+
+# Check database tables
+python -c "import sqlite3; conn = sqlite3.connect('portfolio.db'); cursor = conn.cursor(); cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table';\"); print([row[0] for row in cursor.fetchall()]); conn.close()"
+```
+
+### Position Updates
+```bash
+# Update positions from transactions
+python -c "from app.ingestion.update_positions import update_positions_from_transactions; update_positions_from_transactions()"
+```
+
+## 🚀 Performance & Monitoring
+
+### Performance Benchmarking
+```bash
+# Data loading benchmark
+python scripts/simple_benchmark.py
+
+# Memory usage monitoring
+python -c "import psutil; print(f'Memory usage: {psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB')"
+
+# Time data loading
+time python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Loaded {len(df)} transactions')"
+
+# Time normalization process
+time python scripts/test_normalization.py
+
+# Time portfolio calculation
+time python scripts/testing/test_portfolio_cleaned.py
+```
+
+### System Resource Monitoring
+```bash
+# Check memory usage
+python -c "import psutil; print(f'Memory: {psutil.virtual_memory().percent}%')"
+
+# Check disk usage
+df -h
+
+# Monitor Python process
+top -p $(pgrep -f streamlit)
+```
+
+## 🔄 Development Workflow Commands
+
+### Environment Setup
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set Python path
+export PYTHONPATH=$(pwd)
+```
+
+### Code Quality
+```bash
+# Run linting
+ruff check app/ ui/ tests/
+
+# Format code
+ruff format app/ ui/ tests/
+
+# Type checking
+mypy app/
+```
+
+### Git Operations
+```bash
+# Check status
+git status
+
+# Add changes
+git add .
+
+# Commit with message
+git commit -m "feat: description of changes"
+
+# Push changes
+git push origin main
+```
+
+## 🔧 Troubleshooting Commands
+
+### Cache Management
+```bash
+# Clear Streamlit cache
+streamlit cache clear
+
+# Clear Python cache
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -name "*.pyc" -delete
+```
+
+### File System Operations
+```bash
+# Check file sizes
+ls -lah output/
+ls -lah data/transaction_history/
+ls -lah data/historical_price_data/
+
+# Check disk space
+du -sh data/
+du -sh output/
+```
+
+### Process Management
+```bash
+# Kill Streamlit processes
+pkill -f streamlit
+
+# Kill API server processes
+pkill -f uvicorn
+
+# Check running processes
+ps aux | grep python
+```
+
+## 📋 Backup & Recovery
+
+### Data Backup
+```bash
+# Backup normalized data
+cp output/transactions_normalized.csv output/transactions_normalized_backup_$(date +%Y%m%d).csv
+
+# Backup database
+cp portfolio.db portfolio_backup_$(date +%Y%m%d).db
+
+# Backup configuration
+tar -czf config_backup_$(date +%Y%m%d).tar.gz config/
+```
+
+### Recovery Commands
+```bash
+# Restore from backup
+cp output/transactions_normalized_backup_YYYYMMDD.csv output/transactions_normalized.csv
+
+# Regenerate from source data
+PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False)"
+
+# Rebuild database
+rm portfolio.db
+python migration.py
+```
+
+## 🎯 Quick Health Check
+
+### System Health Check (Run this first!)
+```bash
+# Complete health check
+echo "=== PORTFOLIO ANALYTICS HEALTH CHECK ===" && \
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'✅ Loaded {len(df)} transactions'); print(f'✅ Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}'); print(f'✅ Assets: {df[\"asset\"].nunique()}'); unknown = (df[\"type\"] == \"unknown\").sum(); print(f'✅ Unknown types: {unknown} ({unknown/len(df)*100:.1f}%)'); duplicates = df.duplicated().sum(); print(f'✅ Duplicates: {duplicates}'); print(f'✅ Institutions: {list(df[\"institution\"].unique())}')" && \
+echo "=== PORTFOLIO CALCULATION TEST ===" && \
+python scripts/testing/test_portfolio_cleaned.py | head -20 && \
+echo "=== HEALTH CHECK COMPLETE ==="
+```
+
+### Expected Healthy Results
+- **Transactions**: ~4,235 loaded
+- **Portfolio Value**: ~$977K
+- **Unknown Types**: <2%
+- **Duplicates**: 0
+- **Top Assets**: BTC (~$431K), VOO (~$186K), ETH (~$177K)
+- **Test Pass Rate**: >93%

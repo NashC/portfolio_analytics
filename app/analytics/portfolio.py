@@ -90,16 +90,16 @@ def fetch_stock_prices(asset: str, start_date: datetime, end_date: datetime) -> 
         
         # Handle both single and multi-level column indexes
         if isinstance(data.columns, pd.MultiIndex):
-            # Multi-level columns (when downloading multiple tickers)
+            # Multi-level columns (when downloading single ticker, yfinance still returns MultiIndex)
             if 'Adj Close' in data.columns.get_level_values(0):
-                prices = data['Adj Close'].iloc[:, 0] if len(data['Adj Close'].columns) > 1 else data['Adj Close']
+                prices = data[('Adj Close', ticker)]
             elif 'Close' in data.columns.get_level_values(0):
-                prices = data['Close'].iloc[:, 0] if len(data['Close'].columns) > 1 else data['Close']
+                prices = data[('Close', ticker)]
             else:
                 print(f"⚠️ No Close/Adj Close data for {asset}")
                 return None
         else:
-            # Single-level columns
+            # Single-level columns (shouldn't happen with current yfinance, but keep for safety)
             if 'Adj Close' in data.columns:
                 prices = data['Adj Close']
             elif 'Close' in data.columns:
@@ -108,8 +108,12 @@ def fetch_stock_prices(asset: str, start_date: datetime, end_date: datetime) -> 
                 print(f"⚠️ No Close/Adj Close data for {asset}")
                 return None
         
-        # Convert to DataFrame with proper column name
-        prices_df = pd.DataFrame({asset: prices})
+        # Convert to DataFrame with proper column name and ensure we have a proper index
+        if isinstance(prices, pd.Series):
+            prices_df = pd.DataFrame({asset: prices})
+        else:
+            # If it's already a DataFrame, rename the column
+            prices_df = pd.DataFrame({asset: prices.values}, index=prices.index)
         
         # Remove any duplicate dates
         prices_df = prices_df[~prices_df.index.duplicated(keep='last')]
@@ -141,8 +145,13 @@ def fetch_crypto_prices(asset: str, start_date: datetime, end_date: datetime) ->
         return cached_prices
     
     try:
+        # Map ETH2 to ETH for price lookup (ETH2 is just staked ETH, same price)
+        price_asset = asset
+        if asset == 'ETH2':
+            price_asset = 'ETH'
+        
         # For non-stablecoins, try CoinGecko API
-        coin_id = CRYPTO_ASSET_IDS.get(asset)
+        coin_id = CRYPTO_ASSET_IDS.get(price_asset)
         if not coin_id:
             print(f"⚠️ No CoinGecko mapping for asset: {asset}")
             return None
@@ -171,7 +180,7 @@ def fetch_crypto_prices(asset: str, start_date: datetime, end_date: datetime) ->
             
             prices_list = data.get("prices", [])
             if prices_list:
-                df = pd.DataFrame(prices_list, columns=["timestamp", asset])
+                df = pd.DataFrame(prices_list, columns=["timestamp", asset])  # Use original asset name
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
                 df = df.set_index("timestamp")
                 df = df.resample("D").last()  # Ensure daily frequency
@@ -201,9 +210,14 @@ def load_historical_price_csv(asset: str, start_date: datetime, end_date: dateti
     Load historical price data from CSV files in the historical_price_data folder.
     Files are named like: historical_price_data_daily_[source]_[asset]USD.csv
     """
+    # Map ETH2 to ETH for price data (ETH2 is just staked ETH, same price)
+    price_asset = asset
+    if asset == 'ETH2':
+        price_asset = 'ETH'
+    
     # Look for CSV files matching the asset
     data_dir = "data/historical_price_data"
-    pattern = f"{data_dir}/historical_price_data_daily_*_{asset}USD.csv"
+    pattern = f"{data_dir}/historical_price_data_daily_*_{price_asset}USD.csv"
     matching_files = glob.glob(pattern)
     
     if not matching_files:
@@ -226,6 +240,7 @@ def load_historical_price_csv(asset: str, start_date: datetime, end_date: dateti
         
         # Set date as index and return close prices
         df = df.set_index('date')
+        # Use the original asset name as column name (so ETH2 stays as ETH2)
         price_series = df[['close']].rename(columns={'close': asset})
         
         # Remove any duplicate dates
@@ -332,6 +347,18 @@ def fetch_historical_prices(assets: List[str], start_date: datetime, end_date: d
 # Portfolio Time Series Calculation
 ##########################################
 
+def consolidate_eth_holdings(transactions: pd.DataFrame) -> pd.DataFrame:
+    """
+    Consolidate ETH and ETH2 holdings since they represent the same asset.
+    ETH2 is just staked ETH and should be treated as ETH for portfolio purposes.
+    """
+    transactions = transactions.copy()
+    
+    # Convert ETH2 to ETH
+    transactions.loc[transactions['asset'] == 'ETH2', 'asset'] = 'ETH'
+    
+    return transactions
+
 def compute_portfolio_time_series_with_external_prices(transactions: pd.DataFrame) -> pd.DataFrame:
     """Compute portfolio value over time using external price data."""
     # Clean the data first - remove rows with invalid assets
@@ -340,6 +367,30 @@ def compute_portfolio_time_series_with_external_prices(transactions: pd.DataFram
     
     if transactions.empty:
         return pd.DataFrame()
+    
+    # CRITICAL FIX: Filter out internal transfers that don't represent actual acquisitions/disposals
+    # Only include transaction types that represent actual changes in portfolio holdings
+    portfolio_affecting_types = [
+        'buy', 'sell',           # Direct purchases and sales
+        'staking_reward',        # Earned rewards (increase holdings)
+        'dividend', 'interest',  # Earned income (increase holdings)
+        'deposit', 'withdrawal', # Fiat deposits/withdrawals (for USD/stablecoins)
+        'swap'                   # Asset conversions
+    ]
+    
+    # Filter transactions to only include portfolio-affecting types
+    original_count = len(transactions)
+    transactions = transactions[transactions['type'].isin(portfolio_affecting_types)]
+    filtered_count = len(transactions)
+    
+    print(f"🔧 Portfolio calculation: Using {filtered_count}/{original_count} transactions (excluded internal transfers)")
+    
+    if transactions.empty:
+        print("❌ No portfolio-affecting transactions found after filtering")
+        return pd.DataFrame()
+    
+    # Consolidate ETH and ETH2 holdings
+    transactions = consolidate_eth_holdings(transactions)
     
     # Get unique assets and date range
     assets = transactions['asset'].unique()
@@ -362,14 +413,11 @@ def compute_portfolio_time_series_with_external_prices(transactions: pd.DataFram
             # Remove duplicate timestamps by summing quantities for the same date
             asset_transactions = asset_transactions.groupby(asset_transactions.index)['quantity'].sum()
             
-            # Convert to DataFrame for reindexing
-            asset_transactions = pd.DataFrame({'quantity': asset_transactions})
+            # Calculate cumulative holdings FIRST
+            cumulative_holdings = asset_transactions.cumsum()
             
-            # Now reindex to match price data
-            asset_transactions_reindexed = asset_transactions.reindex(prices_df.index, method='ffill')
-            
-            # Calculate cumulative holdings
-            holdings[asset] = asset_transactions_reindexed['quantity'].fillna(0).cumsum()
+            # THEN reindex to match price data (forward-fill the cumulative holdings, not the transactions)
+            holdings[asset] = cumulative_holdings.reindex(prices_df.index, method='ffill').fillna(0)
     
     # Compute portfolio value
     portfolio_value = holdings * prices_df
