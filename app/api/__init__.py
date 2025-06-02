@@ -12,10 +12,26 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.db.base import engine
 from app.valuation import get_portfolio_value, get_value_series
 from app.analytics.portfolio import calculate_returns
 
 app = FastAPI(title="Portfolio Analytics API", version="1.0.0")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup."""
+    print("🚀 Portfolio Analytics API starting up...")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown."""
+    print("🛑 Portfolio Analytics API shutting down...")
+    # Dispose of database engine to close all connections
+    engine.dispose()
+    print("✅ Database connections closed")
 
 
 @app.get("/portfolio/value")

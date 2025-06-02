@@ -3,7 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Portfolio Analytics - Complete System Overview
+# Portfolio Analytics - Complete System Guide
 
 ## 🎯 Project Status: ✅ PRODUCTION READY (v2.1)
 
@@ -51,7 +51,7 @@ Normalized Transactions → Holdings Calculation → Price Application → Perfo
 ### 4. User Interface & API
 - [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py) - Enhanced dashboard (PRODUCTION)
 - [ui/components/](mdc:ui/components) - Reusable chart and metric components
-- [app/api/__init__.py](mdc:app/api/__init__.py) - REST API endpoints
+- [app/api/__init__.py](mdc:app/api/__init__.py) - REST API endpoints with proper shutdown handling
 
 ## 🏦 Supported Institutions & Coverage
 
@@ -108,50 +108,72 @@ portfolio_analytics/
 └── scripts/              # Utility & benchmark scripts
 ```
 
-## 🚀 Quick Start Commands
+## 🚀 Modern Development Setup (uv-based)
 
-### Complete Data Pipeline
+### Environment Setup
 ```bash
-# Process all transaction files and generate normalized data
-PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
+# Create and activate environment
+uv venv
+source .venv/bin/activate
+
+# Install with development tools
+uv pip install -e ".[dev]"
+
+# Or use lock files for exact reproducibility
+uv pip sync requirements-dev.lock
 ```
 
-### Launch Applications
-```bash
-# Enhanced dashboard (PRODUCTION)
-PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+### Key Configuration Files
+- [pyproject.toml](mdc:pyproject.toml) - Modern Python packaging configuration
+- [requirements.lock](mdc:requirements.lock) - Production dependencies (71 packages)
+- [requirements-dev.lock](mdc:requirements-dev.lock) - Development dependencies (162 packages)
+- [MIGRATION_SUMMARY.md](mdc:MIGRATION_SUMMARY.md) - Complete migration documentation
 
-# API server
-uvicorn app.api:app --reload --port 8000
-```
+## 📊 API Architecture
 
-### Testing & Validation
-```bash
-# Full test suite (93.4% pass rate)
-python -m pytest tests/ -v
+### FastAPI Endpoints
+- `GET /health` - Health check
+- `GET /portfolio/value` - Portfolio value for specific date
+- `GET /portfolio/value/series` - Portfolio value time series
+- `GET /portfolio/returns` - Portfolio returns with daily and cumulative data
 
-# Portfolio calculation test
-python test_portfolio_cleaned.py
+### Database Integration
+- [app/db/base.py](mdc:app/db/base.py) - SQLAlchemy models with enhanced connection handling
+- [app/db/session.py](mdc:app/db/session.py) - Database session management
 
-# Debug issues
-python debug_portfolio_issues.py
-```
+### Key Fixes Applied
+- **API Shutdown**: Proper database engine disposal (no more double Ctrl+C)
+- **Connection Pooling**: Enhanced SQLAlchemy settings for reliability
+- **Test Imports**: Fixed all test file imports after uv migration
 
-## 📊 Data Quality & Validation
+## 📊 Expected Results & Quality Targets
 
-### Expected Results
+### Healthy Portfolio Metrics
 - **Portfolio Value**: ~$977K (as of latest fix)
-- **Top Assets**: BTC (~$431K), VOO (~$186K), ETH (~$177K), USD (~$104K)
+- **Top Assets**: BTC (~$431K), VOO (~$186K), ETH (~$177K)
+- **Price Data Coverage**: 64 assets (33 crypto + 31 stocks)
+- **Transaction Processing**: ~4,081/4,235 transactions (excluding transfers)
+
+### Data Quality Targets
 - **Unknown Transaction Types**: <2%
 - **Duplicate Transactions**: 0
-- **Test Pass Rate**: >93%
+- **Missing Data**: 0 for required columns
+- **Test Pass Rate**: >93% (85/91 tests)
 
-### Key Output Files
-- [output/transactions_normalized.csv](mdc:output/transactions_normalized.csv) - Unified transaction ledger
-- [output/portfolio_timeseries.csv](mdc:output/portfolio_timeseries.csv) - Portfolio value over time
-- [output/cost_basis_fifo.csv](mdc:output/cost_basis_fifo.csv) - FIFO cost basis calculations
+### Performance Targets
+- **Environment Setup**: <30 seconds with uv
+- **Data Processing**: <200ms for 4,000+ transactions
+- **Portfolio Calculation**: <2 seconds for full analysis
+- **API Response**: <200ms for portfolio queries
+- **Dashboard Load**: <500ms initial load
 
 ## 🎯 Recent Major Achievements (v2.1)
+
+### uv Migration Success
+- **5-10x faster** dependency operations
+- **Lock files** for reproducible builds
+- **Modern packaging** with PEP 518/621 compliance
+- **Entry points** for command-line tools
 
 ### Historical Price Data Integration
 - **CSV Priority**: Local files over external APIs for better performance

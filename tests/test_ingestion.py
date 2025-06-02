@@ -1,7 +1,7 @@
 import pandas as pd
 import tempfile
 import os
-from ingestion import ingest_csv
+from app.ingestion.loader import ingest_csv
 
 def test_ingest_csv():
     # Create a temporary CSV file with sample data.

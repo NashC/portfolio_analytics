@@ -201,8 +201,15 @@ class AssetSourceMapping(Base):
         Index('ix_asset_source_mapping_source', 'source_id'),
     )
 
-# Create engine and session factory
-engine = create_engine(settings.DATABASE_URL)
+# Create engine and session factory with better connection handling
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=3600,   # Recycle connections every hour
+    pool_timeout=20,     # Timeout for getting connection from pool
+    max_overflow=0,      # Don't allow overflow connections
+    echo=False           # Set to True for SQL debugging
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():

@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime
-from transfers import reconcile_transfers
+from app.ingestion.transfers import reconcile_transfers
 
 def test_reconcile_transfers():
     # Create a sample DataFrame with one transfer_out and one matching transfer_in.

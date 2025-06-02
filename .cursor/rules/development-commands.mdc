@@ -3,9 +3,9 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Portfolio Analytics - Essential Commands Reference
+# Development Commands & Workflows
 
-## 🚀 Core Application Commands
+## 🚀 Essential Commands
 
 ### Complete Data Pipeline
 ```bash
@@ -13,35 +13,54 @@ alwaysApply: true
 PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False); print(f'Processed {len(result_df)} transactions')"
 ```
 
-### Launch Applications
+### Application Launch
 ```bash
 # Enhanced dashboard (PRODUCTION) - Port 8502
 PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
 
-# Legacy dashboard - Port 8501
-PYTHONPATH=$(pwd) streamlit run ui/streamlit_app.py --server.port 8501
-
-# API server - Port 8000
+# API server with auto-reload - Port 8000
 uvicorn app.api:app --reload --port 8000
 
 # Production API server
 uvicorn app.api:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Legacy dashboard - Port 8501
+PYTHONPATH=$(pwd) streamlit run ui/streamlit_app.py --server.port 8501
 ```
 
-## 🧪 Testing & Validation Commands
-
-### Full Test Suite
+### uv-based Development
 ```bash
-# Complete test suite (93.4% pass rate)
+# Environment setup
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+# Daily development
+uv pip install package_name
+uv pip compile pyproject.toml --output-file requirements.lock
+uv pip compile pyproject.toml --extra dev --output-file requirements-dev.lock
+
+# Development tools
+black .
+ruff check .
+mypy .
+pytest
+```
+
+## 🧪 Testing & Validation
+
+### Test Suite
+```bash
+# Full test suite (93.4% pass rate)
 python -m pytest tests/ -v
 
-# Test with coverage report
-python -m pytest tests/ --cov=app --cov-report=html
+# Test with coverage
+python -m pytest tests/ --cov=app --cov=ui --cov-report=html
 
 # Specific test modules
-python -m pytest tests/test_normalization_comprehensive.py -v
+python -m pytest tests/test_cost_basis.py -v
+python -m pytest tests/test_normalization.py -v
 python -m pytest tests/test_portfolio.py -v
-python -m pytest tests/test_api_endpoints.py -v
+python -m pytest tests/test_normalization_comprehensive.py -v
 ```
 
 ### Portfolio Testing
@@ -49,61 +68,20 @@ python -m pytest tests/test_api_endpoints.py -v
 # Main portfolio calculation test
 python scripts/testing/test_portfolio_cleaned.py
 
-# Comprehensive debugging
+# Debug portfolio issues
 python scripts/debug/debug_portfolio_issues.py
-
-# Simple portfolio test with synthetic data
-python test_portfolio_simple.py
-
-# Real data portfolio test (requires migration.py first)
-python test_portfolio_returns_with_real_data.py
-```
-
-### Debug Scripts
-```bash
-# Debug portfolio calculation issues
-python scripts/debug/debug_portfolio_issues.py
-
-# Debug holdings calculation
-python scripts/debug/debug_holdings_calculation.py
-
-# Debug price data loading
-python scripts/debug/debug_price_data.py
-```
-
-### Analysis Scripts
-```bash
-# Analyze portfolio assets
-python scripts/analysis/analyze_portfolio_assets.py
-
-# Analyze ETH balance issues
-python scripts/analysis/analyze_eth_balance.py
-
-# Analyze filtered ETH data
-python scripts/analysis/analyze_filtered_eth.py
-
-# General data analysis
-python scripts/analysis/analyze_data.py
-```
-
-### Quick Validation Commands
-```bash
-# Quick normalization test
-python scripts/test_normalization.py
 
 # Performance benchmark
 python scripts/simple_benchmark.py
-
-# Dashboard demo
-python scripts/demo_dashboard.py
 ```
 
-## 📊 Data Quality & Validation
-
-### Data Quality Checks
+### Data Quality Validation
 ```bash
-# Quick data quality overview
-python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'Loaded {len(df)} transactions'); print(f'Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}'); print(f'Assets: {df[\"asset\"].nunique()}'); print(f'Institutions: {list(df[\"institution\"].unique())}')"
+# Quick health check
+python -c "import app, ui, scripts; print('✅ All modules import successfully')"
+
+# Data quality overview
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'Loaded {len(df)} transactions'); print(f'Unknown types: {(df[\"type\"] == \"unknown\").sum()}'); print(f'Duplicates: {df.duplicated().sum()}')"
 
 # Detailed data quality check
 python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print('Data Quality Checks:'); print(f'Missing timestamps: {df[\"timestamp\"].isna().sum()}'); print(f'Missing assets: {df[\"asset\"].isna().sum()}'); print(f'Missing quantities: {df[\"quantity\"].isna().sum()}'); print(f'Zero quantities: {(df[\"quantity\"] == 0).sum()}'); print(f'Unknown types: {(df[\"type\"] == \"unknown\").sum()}'); duplicates = df.duplicated(subset=['timestamp', 'asset', 'quantity', 'price', 'institution']).sum(); print(f'Duplicate transactions: {duplicates}')"
@@ -124,15 +102,6 @@ python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized
 python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Total assets: {df[\"asset\"].nunique()}'); print('Assets:', sorted(df['asset'].unique()))"
 ```
 
-### Date Range & Coverage
-```bash
-# Date range validation
-python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); df['timestamp'] = pd.to_datetime(df['timestamp']); print(f'Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}')"
-
-# Assets by institution
-python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(df.groupby('institution')['asset'].nunique())"
-```
-
 ## 💰 Historical Price Data Commands
 
 ### Price Data Validation
@@ -147,7 +116,7 @@ python -c "import pandas as pd; from app.analytics.portfolio import compute_port
 python -c "from app.analytics.portfolio import load_historical_price_csv; from datetime import datetime; result = load_historical_price_csv('BTC', datetime(2020, 1, 1), datetime(2024, 12, 31)); print(f'BTC price data: {result.shape if result is not None else \"Not found\"}')"
 ```
 
-## 🔧 Database & Migration Commands
+## 🔧 Database & Migration
 
 ### Database Operations
 ```bash
@@ -159,10 +128,7 @@ rm portfolio.db && python migration.py
 
 # Check database tables
 python -c "import sqlite3; conn = sqlite3.connect('portfolio.db'); cursor = conn.cursor(); cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table';\"); print([row[0] for row in cursor.fetchall()]); conn.close()"
-```
 
-### Position Updates
-```bash
 # Update positions from transactions
 python -c "from app.ingestion.update_positions import update_positions_from_transactions; update_positions_from_transactions()"
 ```
@@ -180,9 +146,6 @@ python -c "import psutil; print(f'Memory usage: {psutil.Process().memory_info().
 # Time data loading
 time python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv'); print(f'Loaded {len(df)} transactions')"
 
-# Time normalization process
-time python scripts/test_normalization.py
-
 # Time portfolio calculation
 time python scripts/testing/test_portfolio_cleaned.py
 ```
@@ -199,48 +162,74 @@ df -h
 top -p $(pgrep -f streamlit)
 ```
 
-## 🔄 Development Workflow Commands
+## 📊 API Testing
 
-### Environment Setup
+### API Endpoints
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
+# Health check
+curl http://localhost:8000/health
 
-# Install dependencies
-pip install -r requirements.txt
+# Portfolio value
+curl "http://localhost:8000/portfolio/value?target_date=2024-01-15"
 
-# Set Python path
-export PYTHONPATH=$(pwd)
+# Portfolio returns
+curl "http://localhost:8000/portfolio/returns?start_date=2024-01-01&end_date=2024-01-31"
 ```
 
-### Code Quality
+## 🔄 Development Workflows
+
+### 1. Adding New Institution Support
+1. Add CSV file to [data/transaction_history/](mdc:data/transaction_history)
+2. Update [config/schema_mapping.yaml](mdc:config/schema_mapping.yaml)
+3. Add institution detection logic in [app/ingestion/loader.py](mdc:app/ingestion/loader.py)
+4. Add transaction type mappings in [app/ingestion/normalization.py](mdc:app/ingestion/normalization.py)
+5. Test with `python scripts/test_normalization.py`
+
+### 2. Adding New Asset Support
+1. Add historical price CSV to [data/historical_price_data/](mdc:data/historical_price_data)
+2. Update `CRYPTO_ASSET_IDS` mapping in [app/analytics/portfolio.py](mdc:app/analytics/portfolio.py)
+3. Test price loading with debug script
+4. Validate portfolio calculation
+
+### 3. Dashboard Development
+1. Use [ui/streamlit_app_v2.py](mdc:ui/streamlit_app_v2.py) as base
+2. Add components to [ui/components/](mdc:ui/components)
+3. Implement caching with `@st.cache_data(ttl=300)`
+4. Test performance with real data
+
+## 🔧 Troubleshooting
+
+### Common Issues & Quick Fixes
+
+#### Import Errors
 ```bash
-# Run linting
-ruff check app/ ui/ tests/
+# Ensure project is installed in editable mode
+uv pip install -e .
 
-# Format code
-ruff format app/ ui/ tests/
-
-# Type checking
-mypy app/
+# Check Python path
+echo $PYTHONPATH
 ```
 
-### Git Operations
+#### Database Issues
 ```bash
-# Check status
-git status
+# Initialize database
+python scripts/migration.py
 
-# Add changes
-git add .
-
-# Commit with message
-git commit -m "feat: description of changes"
-
-# Push changes
-git push origin main
+# Check database connection
+python -c "from app.db.base import engine; print('✅ Database connected')"
 ```
 
-## 🔧 Troubleshooting Commands
+#### API Server Issues
+The API server now includes proper shutdown handlers:
+- Single Ctrl+C shutdown (no more double Ctrl+C needed)
+- Proper database connection cleanup
+- Enhanced connection pooling settings
+
+#### Test Import Issues
+All test files have been updated with correct import paths:
+- [tests/test_cost_basis.py](mdc:tests/test_cost_basis.py) - Fixed imports from `app.analytics.portfolio`
+- [tests/test_ingestion.py](mdc:tests/test_ingestion.py) - Fixed imports from `app.ingestion.loader`
+- [tests/test_normalization.py](mdc:tests/test_normalization.py) - Fixed imports from `app.ingestion.normalization`
 
 ### Cache Management
 ```bash
@@ -250,18 +239,6 @@ streamlit cache clear
 # Clear Python cache
 find . -type d -name "__pycache__" -exec rm -rf {} +
 find . -name "*.pyc" -delete
-```
-
-### File System Operations
-```bash
-# Check file sizes
-ls -lah output/
-ls -lah data/transaction_history/
-ls -lah data/historical_price_data/
-
-# Check disk space
-du -sh data/
-du -sh output/
 ```
 
 ### Process Management
@@ -276,49 +253,19 @@ pkill -f uvicorn
 ps aux | grep python
 ```
 
-## 📋 Backup & Recovery
+## 🎯 Expected Healthy Results
 
-### Data Backup
-```bash
-# Backup normalized data
-cp output/transactions_normalized.csv output/transactions_normalized_backup_$(date +%Y%m%d).csv
-
-# Backup database
-cp portfolio.db portfolio_backup_$(date +%Y%m%d).db
-
-# Backup configuration
-tar -czf config_backup_$(date +%Y%m%d).tar.gz config/
-```
-
-### Recovery Commands
-```bash
-# Restore from backup
-cp output/transactions_normalized_backup_YYYYMMDD.csv output/transactions_normalized.csv
-
-# Regenerate from source data
-PYTHONPATH=$(pwd) python -c "from app.ingestion.loader import process_transactions; result_df = process_transactions('data/transaction_history', 'config/schema_mapping.yaml'); result_df.to_csv('output/transactions_normalized.csv', index=False)"
-
-# Rebuild database
-rm portfolio.db
-python migration.py
-```
-
-## 🎯 Quick Health Check
-
-### System Health Check (Run this first!)
-```bash
-# Complete health check
-echo "=== PORTFOLIO ANALYTICS HEALTH CHECK ===" && \
-python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'✅ Loaded {len(df)} transactions'); print(f'✅ Date range: {df[\"timestamp\"].min()} to {df[\"timestamp\"].max()}'); print(f'✅ Assets: {df[\"asset\"].nunique()}'); unknown = (df[\"type\"] == \"unknown\").sum(); print(f'✅ Unknown types: {unknown} ({unknown/len(df)*100:.1f}%)'); duplicates = df.duplicated().sum(); print(f'✅ Duplicates: {duplicates}'); print(f'✅ Institutions: {list(df[\"institution\"].unique())}')" && \
-echo "=== PORTFOLIO CALCULATION TEST ===" && \
-python scripts/testing/test_portfolio_cleaned.py | head -20 && \
-echo "=== HEALTH CHECK COMPLETE ==="
-```
-
-### Expected Healthy Results
+### System Health Check
 - **Transactions**: ~4,235 loaded
 - **Portfolio Value**: ~$977K
 - **Unknown Types**: <2%
 - **Duplicates**: 0
 - **Top Assets**: BTC (~$431K), VOO (~$186K), ETH (~$177K)
 - **Test Pass Rate**: >93%
+
+### Performance Targets
+- **Environment Setup**: <30 seconds with uv
+- **Data Processing**: <200ms for 4,000+ transactions
+- **Portfolio Calculation**: <2 seconds for full analysis
+- **API Response**: <200ms for portfolio queries
+- **Dashboard Load**: <500ms initial load

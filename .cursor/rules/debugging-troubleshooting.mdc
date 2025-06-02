@@ -1,0 +1,309 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Debugging & Troubleshooting Guide
+
+## 🔧 Critical Development Patterns
+
+### Data Type Handling
+Always convert Decimal to float for pandas operations:
+```python
+# ✅ Correct
+df['value'] = df['quantity'].astype(float) * df['price'].astype(float)
+total_values = portfolio_ts['total'].astype(float)
+
+# ❌ Avoid - causes pandas errors
+df['value'] = df['quantity'] * df['price']  # If columns contain Decimal objects
+```
+
+### Error Handling Pattern
+```python
+try:
+    # Main processing logic
+    result = process_data(df)
+    validation_results = validate_data(result)
+    
+    if validation_results['errors'] > 0:
+        logger.warning(f"Found {validation_results['errors']} validation errors")
+    
+    return result
+    
+except Exception as e:
+    logger.error(f"Processing failed: {e}")
+    return pd.DataFrame()  # Graceful degradation
+```
+
+### Price Data Priority System
+```python
+def fetch_prices(asset: str) -> Optional[pd.DataFrame]:
+    # 1. Try historical CSV files first
+    csv_data = load_historical_price_csv(asset, start_date, end_date)
+    if csv_data is not None:
+        return csv_data
+    
+    # 2. Fall back to external APIs
+    if asset in CRYPTO_ASSET_IDS:
+        return fetch_crypto_prices(asset, start_date, end_date)
+    else:
+        return fetch_stock_prices(asset, start_date, end_date)
+```
+
+### Asset Consolidation Pattern
+```python
+def consolidate_similar_assets(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Consolidate assets that represent the same underlying value."""
+    transactions = transactions.copy()
+    
+    # ETH2 is staked ETH, same price and value
+    transactions.loc[transactions['asset'] == 'ETH2', 'asset'] = 'ETH'
+    
+    return transactions
+```
+
+## 🔍 Common Issues & Solutions
+
+### Data Quality Issues
+
+#### 1. Duplicate Transactions
+**Check**: Duplicates in [output/transactions_normalized.csv](mdc:output/transactions_normalized.csv)
+```python
+duplicates = df.duplicated(subset=['timestamp', 'asset', 'quantity', 'price', 'institution']).sum()
+```
+
+#### 2. Missing Amount Column
+**Problem**: Dashboard expects `amount` column but CSV has `quantity`
+**Solution**:
+```python
+if 'amount' not in df.columns and 'quantity' in df.columns:
+    df['amount'] = df['quantity']
+```
+
+#### 3. Unknown Transaction Types
+**Check**: Unmapped transaction types
+```python
+unknown_types = (df['type'] == 'unknown').sum()
+```
+
+### Price Data Issues
+
+#### yfinance MultiIndex Error
+**Problem**: "If using all scalar values, you must pass an index"
+**Solution**: Properly handle MultiIndex columns in [app/analytics/portfolio.py](mdc:app/analytics/portfolio.py)
+```python
+# Correct way to access MultiIndex columns
+if isinstance(data.columns, pd.MultiIndex):
+    prices = data[('Close', ticker)]  # Use tuple notation
+```
+
+#### ETH/ETH2 Consolidation
+**Problem**: ETH and ETH2 showing as separate assets
+**Solution**: ETH2 is staked ETH and should be consolidated with ETH
+- Map ETH2 to ETH for price lookups
+- Use `consolidate_eth_holdings()` function in portfolio calculation
+
+#### Options Contracts
+**Problem**: Options contracts failing price lookup
+**Solution**: Filter out early using pattern detection
+```python
+if ' ' in asset or 'C00' in asset or 'P00' in asset:
+    print(f"⚠️ Skipping options contract: {asset}")
+    return None
+```
+
+### Portfolio Calculation Issues
+
+#### Transfer Transaction Filtering
+**Critical**: Only include portfolio-affecting transaction types:
+```python
+portfolio_affecting_types = [
+    'buy', 'sell', 'staking_reward', 'dividend', 'interest', 
+    'deposit', 'withdrawal', 'swap'
+]
+```
+**Exclude**: `transfer_in`, `transfer_out` (internal transfers)
+
+## 🧪 Debug Scripts & Commands
+
+### Quick Data Quality Check
+```bash
+python -c "import pandas as pd; df = pd.read_csv('output/transactions_normalized.csv', parse_dates=['timestamp']); print(f'Loaded {len(df)} transactions'); print(f'Unknown types: {(df[\"type\"] == \"unknown\").sum()}'); print(f'Duplicates: {df.duplicated().sum()}')"
+```
+
+### Debug Scripts
+```bash
+# Debug portfolio calculation issues
+python scripts/debug/debug_portfolio_issues.py
+
+# Debug holdings calculation
+python scripts/debug/debug_holdings_calculation.py
+
+# Debug price data loading
+python scripts/debug/debug_price_data.py
+```
+
+### Analysis Scripts
+```bash
+# Analyze portfolio assets
+python scripts/analysis/analyze_portfolio_assets.py
+
+# Analyze ETH balance issues
+python scripts/analysis/analyze_eth_balance.py
+
+# Analyze filtered ETH data
+python scripts/analysis/analyze_filtered_eth.py
+
+# General data analysis
+python scripts/analysis/analyze_data.py
+```
+
+## 🚨 Red Flags to Watch For
+
+1. **Portfolio value >$10M** (likely calculation error)
+2. **Duplicate asset entries** in top holdings
+3. **yfinance "scalar values" errors**
+4. **High percentage of unknown transaction types** (>5%)
+5. **Missing price data** for major assets (BTC, ETH, major stocks)
+6. **API server requiring double Ctrl+C** (should be fixed with shutdown handlers)
+
+## 🔧 Key Files for Debugging
+
+### Core Files
+- [app/analytics/portfolio.py](mdc:app/analytics/portfolio.py) - Main portfolio calculation logic
+- [app/ingestion/normalization.py](mdc:app/ingestion/normalization.py) - Transaction normalization
+- [config/schema_mapping.yaml](mdc:config/schema_mapping.yaml) - Institution mappings
+
+### Debug Scripts (scripts/debug/)
+- [scripts/debug/debug_portfolio_issues.py](mdc:scripts/debug/debug_portfolio_issues.py) - Comprehensive debugging script
+- [scripts/debug/debug_holdings_calculation.py](mdc:scripts/debug/debug_holdings_calculation.py) - Holdings calculation debugging
+- [scripts/debug/debug_price_data.py](mdc:scripts/debug/debug_price_data.py) - Price data debugging
+
+### Analysis Scripts (scripts/analysis/)
+- [scripts/analysis/analyze_portfolio_assets.py](mdc:scripts/analysis/analyze_portfolio_assets.py) - Portfolio asset analysis
+- [scripts/analysis/analyze_eth_balance.py](mdc:scripts/analysis/analyze_eth_balance.py) - ETH balance analysis
+- [scripts/analysis/analyze_filtered_eth.py](mdc:scripts/analysis/analyze_filtered_eth.py) - Filtered ETH data analysis
+- [scripts/analysis/analyze_data.py](mdc:scripts/analysis/analyze_data.py) - General data analysis
+
+### Test Scripts (scripts/testing/)
+- [scripts/testing/test_portfolio_cleaned.py](mdc:scripts/testing/test_portfolio_cleaned.py) - Portfolio testing script
+- [tests/test_normalization_comprehensive.py](mdc:tests/test_normalization_comprehensive.py) - 32 normalization tests
+
+### Output Files
+- [output/transactions_normalized.csv](mdc:output/transactions_normalized.csv) - Normalized transaction data
+- [output/portfolio_timeseries.csv](mdc:output/portfolio_timeseries.csv) - Portfolio value over time
+
+## 🎯 Expected Healthy Results
+
+### Portfolio Metrics
+- **Portfolio Value**: ~$977K (as of latest fix)
+- **Top Assets**: BTC (~$431K), VOO (~$186K), ETH (~$177K)
+- **Price Data Coverage**: 64 assets (33 crypto + 31 stocks)
+- **Transaction Processing**: ~4,081/4,235 transactions (excluding transfers)
+
+### Data Quality Metrics
+- **Unknown Transaction Types**: <2%
+- **Duplicate Transactions**: 0
+- **Missing Data**: 0 for required columns
+- **Test Pass Rate**: >93% (85/91 tests)
+
+### Performance Metrics
+- **Normalization**: <200ms for 10,000+ transactions
+- **Portfolio Calculation**: <2 seconds for full analysis
+- **Dashboard Load**: <500ms initial load
+- **Memory Usage**: <5MB overhead
+
+## 🚨 Troubleshooting Common Issues
+
+### "Missing amount column" Error
+```python
+# Add to data loading
+if 'amount' not in df.columns and 'quantity' in df.columns:
+    df['amount'] = df['quantity']
+```
+
+### yfinance "scalar values" Error
+```python
+# Use tuple notation for MultiIndex
+if isinstance(data.columns, pd.MultiIndex):
+    prices = data[('Close', ticker)]
+```
+
+### High Unknown Transaction Types
+1. Check [config/schema_mapping.yaml](mdc:config/schema_mapping.yaml) for missing mappings
+2. Add new transaction types to `INSTITUTION_MAPPINGS`
+3. Test with `python scripts/test_normalization.py`
+
+### Portfolio Value Too High/Low
+1. Check transaction filtering in `compute_portfolio_time_series_with_external_prices()`
+2. Verify price data loading
+3. Check for duplicate assets (ETH/ETH2)
+4. Validate cumulative holdings calculation
+
+### API Server Issues (FIXED)
+The API server now includes proper shutdown handlers in [app/api/__init__.py](mdc:app/api/__init__.py):
+- Single Ctrl+C shutdown (no more double Ctrl+C needed)
+- Proper database connection cleanup
+- Enhanced SQLAlchemy connection pooling
+
+### Test Import Issues (FIXED)
+All test files have been updated with correct import paths after uv migration:
+- [tests/test_cost_basis.py](mdc:tests/test_cost_basis.py) - Fixed imports from `app.analytics.portfolio`
+- [tests/test_ingestion.py](mdc:tests/test_ingestion.py) - Fixed imports from `app.ingestion.loader`
+- [tests/test_normalization.py](mdc:tests/test_normalization.py) - Fixed imports from `app.ingestion.normalization`
+- [tests/test_transfers.py](mdc:tests/test_transfers.py) - Fixed imports from `app.ingestion.transfers`
+- [tests/test_migration.py](mdc:tests/test_migration.py) - Fixed imports from `scripts.migration`
+
+## 🔧 Testing Patterns & Best Practices
+
+### Test Structure Pattern
+```python
+import pytest
+from app.analytics.portfolio import calculate_portfolio_value
+
+class TestPortfolioCalculation:
+    """Test portfolio calculation functionality."""
+    
+    def setup_method(self):
+        """Set up test data before each test."""
+        self.test_transactions = load_test_data()
+    
+    def test_portfolio_value_calculation(self):
+        """Test basic portfolio value calculation."""
+        # Arrange
+        expected_value = 977469.50
+        
+        # Act
+        result = calculate_portfolio_value(self.test_transactions)
+        
+        # Assert
+        assert abs(result - expected_value) < 0.01
+        
+    def test_empty_portfolio(self):
+        """Test portfolio calculation with no transactions."""
+        # Arrange
+        empty_transactions = pd.DataFrame()
+        
+        # Act & Assert
+        with pytest.raises(ValueError, match="No transactions provided"):
+            calculate_portfolio_value(empty_transactions)
+```
+
+### Mock External Services
+```python
+import pytest
+from unittest.mock import patch, MagicMock
+
+@patch('app.services.price_service.fetch_crypto_prices')
+def test_price_fetching_with_mock(mock_fetch):
+    """Test price fetching with mocked external API."""
+    # Arrange
+    mock_fetch.return_value = {"BTC": 45000.00}
+    
+    # Act
+    result = get_asset_price("BTC", "2024-01-15")
+    
+    # Assert
+    assert result == 45000.00
+    mock_fetch.assert_called_once()
+```

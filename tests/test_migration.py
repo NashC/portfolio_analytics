@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 import tempfile
 
-from migration import DatabaseMigration
+from scripts.migration import DatabaseMigration
 from app.db.base import Base, Asset, DataSource, PriceData, AssetSourceMapping
 
 @pytest.fixture

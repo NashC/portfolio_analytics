@@ -1,18 +1,34 @@
-# Ignore virtual environment
+# Virtual environments
 .venv/
+venv/
+.venv_backup/
+ENV/
+env/
 
-# Byte-compiled / cache files
+# uv specific
+uv.lock
+.uv_cache/
+
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.so
 *.egg-info/
+*.egg
+
+# Build system
+build/
+dist/
+*.whl
+
+# Lock files (optional - you may want to commit these for reproducibility)
+requirements.lock
+requirements-dev.lock
 
 # Output / build artifacts
 output/
-build/
-dist/
 
 # Jupyter/IPython
 .ipynb_checkpoints/
@@ -75,3 +91,14 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+
+# Pre-commit
+.pre-commit-cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/

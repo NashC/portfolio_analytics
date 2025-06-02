@@ -38,8 +38,10 @@ Built with `pandas`, `Streamlit`, `SQLAlchemy`, and modular Python components.
 portfolio_analytics/
 │
 ├── README.md                 # Project documentation
-├── pyproject.toml           # Poetry build and dependencies
-├── requirements.txt         # Python dependencies
+├── pyproject.toml           # Modern Python packaging configuration
+├── requirements.txt         # Legacy Python dependencies
+├── requirements.lock        # Locked dependencies for reproducibility
+├── requirements-dev.lock    # Development dependencies lock file
 ├── pytest.ini              # Test configuration
 ├── .pre-commit-config.yaml  # Code quality tools
 ├── .github/workflows/       # CI/CD pipelines
@@ -97,26 +99,70 @@ portfolio_analytics/
 
 ## 🛠️ Setup
 
-1. **Clone the repository:**
+### Modern Setup with uv (Recommended)
+
+1. **Install uv** (if not already installed):
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Clone the repository:**
    ```bash
    git clone https://github.com/yourusername/portfolio-analytics.git
    cd portfolio-analytics
    ```
 
-2. **Create virtual environment:**
+3. **Create and activate virtual environment:**
+   ```bash
+   uv venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+4. **Install project with all dependencies:**
+   ```bash
+   # Install with development tools (recommended for development)
+   uv pip install -e ".[dev]"
+   
+   # Or install production dependencies only
+   uv pip install -e .
+   ```
+
+5. **Initialize the database:**
+   ```bash
+   python scripts/migration.py
+   ```
+
+### Alternative Installation Methods
+
+**Use lock files for exact reproducibility:**
+```bash
+# Production dependencies
+uv pip sync requirements.lock
+
+# Development dependencies
+uv pip sync requirements-dev.lock
+```
+
+**Install specific dependency groups:**
+```bash
+# Testing tools only
+uv pip install -e ".[test]"
+
+# Documentation tools
+uv pip install -e ".[docs]"
+```
+
+### Legacy pip setup (if needed)
+
+1. **Create virtual environment:**
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-3. **Install dependencies:**
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
-   ```
-
-4. **Initialize the database:**
-   ```bash
-   python scripts/migration.py
    ```
 
 ---
@@ -147,6 +193,9 @@ python scripts/migration.py
 ```bash
 # From project root with PYTHONPATH
 PYTHONPATH=$(pwd) streamlit run ui/streamlit_app_v2.py --server.port 8502
+
+# Or using the command-line entry point (if installed with uv)
+portfolio-dashboard
 ```
 
 ### 3. Alternative: Launch Legacy Dashboard:
@@ -157,6 +206,48 @@ streamlit run ui/streamlit_app.py
 ### 4. Start API Server (Optional):
 ```bash
 uvicorn app.api:app --reload --port 8000
+
+# Or using the command-line entry point
+portfolio-analytics
+```
+
+---
+
+## 🔧 Development Workflow
+
+### Daily Development Commands
+
+```bash
+# Activate environment
+source .venv/bin/activate
+
+# Install new package
+uv pip install package_name
+
+# Update lock files
+uv pip compile pyproject.toml --output-file requirements.lock
+uv pip compile pyproject.toml --extra dev --output-file requirements-dev.lock
+
+# Run development tools
+black .
+isort .
+ruff check .
+mypy .
+
+# Run tests
+pytest
+```
+
+### Team Collaboration
+
+```bash
+# For new team members or fresh environments
+uv venv
+source .venv/bin/activate
+uv pip sync requirements-dev.lock  # Exact reproducibility
+
+# For development
+uv pip install -e ".[dev]"
 ```
 
 ---

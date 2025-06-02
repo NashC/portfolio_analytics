@@ -1,55 +1,262 @@
-[tool.poetry]
-name = "portfolio-analytics"
-version = "0.1.0"
-description = "Portfolio analytics and tracking system"
-authors = ["Your Name <your.email@example.com>"]
-readme = "README.md"
-packages = [{include = "app"}]
-
-[tool.poetry.dependencies]
-python = "^3.9"
-fastapi = "^0.109.0"
-uvicorn = "^0.27.0"
-sqlalchemy = "^2.0.25"
-alembic = "^1.13.1"
-pydantic = "^2.6.1"
-pydantic-settings = "^2.1.0"
-streamlit = "^1.31.0"
-pandas = "^2.2.0"
-numpy = "^1.26.3"
-python-dotenv = "^1.0.0"
-requests = "^2.31.0"
-typer = "^0.9.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-cov = "^4.1.0"
-black = "^24.1.1"
-ruff = "^0.2.1"
-mypy = "^1.8.0"
-pre-commit = "^3.6.0"
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.scripts]
-cli = "scripts.cli:app"
+[project]
+name = "portfolio-analytics"
+version = "2.1.0"
+description = "Comprehensive financial analytics application for tracking portfolio performance, holdings, and tax-relevant metrics across multiple financial institutions"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Portfolio Analytics Team", email = "contact@portfolio-analytics.com"},
+]
+keywords = [
+    "portfolio",
+    "analytics",
+    "finance",
+    "crypto",
+    "stocks",
+    "tax-tracking",
+    "investment",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+requires-python = ">=3.9"
+dependencies = [
+    # Core data processing
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    
+    # Web framework and API
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "streamlit>=1.30.0",
+    
+    # Database and ORM
+    "sqlalchemy>=2.0.0",
+    "peewee>=3.17.0",
+    
+    # Data validation and settings
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.1.0",
+    
+    # Configuration and utilities
+    "pyyaml>=6.0.0",
+    "python-dateutil>=2.8.2",
+    "python-dotenv>=1.0.0",
+    "requests>=2.25.0",
+    
+    # Financial data sources
+    "yfinance>=0.2.36",
+    "pycoingecko>=3.1.0",
+    
+    # Visualization
+    "plotly>=5.18.0",
+    "seaborn>=0.13.0",
+    "matplotlib>=3.7.0",
+    
+    # Additional utilities
+    "psutil>=5.9.0",
+    "tenacity>=8.0.0",
+]
 
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    
+    # Code quality
+    "black>=24.1.0",
+    "isort>=5.12.0",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
+    
+    # Development tools
+    "pre-commit>=3.6.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.29.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+# Command-line entry points
+[project.scripts]
+portfolio-analytics = "app.main:main"
+portfolio-dashboard = "ui.streamlit_app_v2:main"
+portfolio-migrate = "scripts.migration:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/portfolio-analytics"
+Documentation = "https://portfolio-analytics.readthedocs.io/"
+Repository = "https://github.com/yourusername/portfolio-analytics.git"
+Issues = "https://github.com/yourusername/portfolio-analytics/issues"
+
+# Build configuration
+[tool.hatch.build.targets.wheel]
+packages = ["app", "ui", "scripts"]
+
+# Tool configurations
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py39', 'py310', 'py311', 'py312']
 include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["app", "ui", "scripts", "tests"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.ruff]
-line-length = 88
 target-version = "py39"
-select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
-ignore = []
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "PL",  # pylint
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "PLR0913", # too many arguments to function call
+]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
 
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-disallow_incomplete_defs = true 
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "yfinance.*",
+    "pycoingecko.*",
+    "plotly.*",
+    "streamlit.*",
+    "peewee.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov=ui",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=80",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+]
+
+[tool.coverage.run]
+source = ["app", "ui"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+] 

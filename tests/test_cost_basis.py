@@ -1,5 +1,5 @@
 import pandas as pd
-from analytics import calculate_cost_basis_fifo, calculate_cost_basis_avg
+from app.analytics.portfolio import calculate_cost_basis_fifo, calculate_cost_basis_avg
 
 def test_calculate_cost_basis_fifo():
     # Create sample transactions.

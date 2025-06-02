@@ -1,5 +1,5 @@
 import pandas as pd
-from normalization import normalize_transaction_types
+from app.ingestion.normalization import normalize_transaction_types
 
 def test_normalize_transaction_types():
     raw = pd.DataFrame({
