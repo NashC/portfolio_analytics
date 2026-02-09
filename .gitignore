@@ -61,6 +61,8 @@ htmlcov/
 # IDE and editor files
 .vscode/
 .idea/
+.cursor/
+.cursorignore
 *.sublime-*
 
 # Project management temp files
