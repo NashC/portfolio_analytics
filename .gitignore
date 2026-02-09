@@ -32,6 +32,7 @@ data/transaction_history/*.csv
 
 # Legacy: keep old patterns for compatibility
 *.csv
+*.db
 data/
 !config/schema_mapping.yaml  # keep this config file tracked
 
