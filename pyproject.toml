@@ -2,7 +2,7 @@
 name = "portfolio-analytics"
 version = "0.1.0"
 description = "Portfolio analytics and tracking system"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Nash Collins"]
 readme = "README.md"
 packages = [{include = "app"}]
 
